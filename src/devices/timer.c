@@ -10,7 +10,6 @@
 
 /* See [8254] for hardware details of the 8254 timer chip. */
 // Project was imported by Arpith to Eclipse on 14 August 2015. This is a test
-
 #if TIMER_FREQ < 19
 #error 8254 timer requires TIMER_FREQ >= 19
 #endif
@@ -88,8 +87,29 @@ void timer_sleep(int64_t ticks)
 	int64_t start = timer_ticks();
 
 	ASSERT(intr_get_level() == INTR_ON);
-	while (timer_elapsed(start) < ticks)
-		thread_yield();
+
+	//Arpith's implementation
+	//save state, Disable interrupts
+	//thread_sleep(start + ticks);
+	//thread_block();
+	//restore previous interrupt state
+
+	if (ticks > 0)
+	{
+		enum intr_level original_interrupt_state = intr_disable();
+
+		//calculates the least time the thread remains suspended
+		int64_t end_ticks = start + ticks;
+		thread_sleep(end_ticks);
+		//printf("thread is about to be blocked\n");	//debug message
+		thread_block();
+		//printf("The thread has been unblocked\n");	//debug message
+		intr_set_level(original_interrupt_state);
+	}
+
+	//original busy wait implementation of sleep
+//	while (timer_elapsed(start) < ticks)
+//		thread_yield();
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
