@@ -89,7 +89,7 @@ void timer_sleep(int64_t ticks)
 	ASSERT(intr_get_level() == INTR_ON);
 
 	//Arpith's implementation
-	//save state, Disable interrupts
+	//save state of interrupts and Disable it
 	//thread_sleep(start + ticks);
 	//thread_block();
 	//restore previous interrupt state

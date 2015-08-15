@@ -117,9 +117,8 @@ extern bool thread_mlfqs;
 
 /***********************************************************/
 //this section contains custom function implemented by Arpith
-void thread_sleep(int64_t end_ticks);
 void thread_wake(int64_t current_ticks);
-
+void thread_sleep(int64_t end_ticks);
 /***********************************************************/
 
 void thread_init(void);

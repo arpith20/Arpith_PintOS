@@ -14,6 +14,7 @@
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
+#include "devices/timer.h"
 
 /* Random value for struct thread's `magic' member.
  Used to detect stack overflow.  See the big comment at the top
@@ -75,6 +76,7 @@ static void schedule(void);
 void thread_schedule_tail(struct thread *prev);
 static tid_t allocate_tid(void);
 
+
 /* Initializes the threading system by transforming the code
  that's currently running into a thread.  This can't work in
  general and it is possible in this case only because loader.S
@@ -96,7 +98,7 @@ void thread_init(void)
 
 	/*********************************/
 	//Arpith's Implementation
-	list_init(&alarm_blocked_threads);
+	list_init(&alarm_blocked_threads); //this list contains the list of all threads blocked by timer_sleep
 
 	/*********************************/
 
@@ -108,9 +110,13 @@ void thread_init(void)
 	init_thread(initial_thread, "main", PRI_DEFAULT);
 	initial_thread->status = THREAD_RUNNING;
 	initial_thread->tid = allocate_tid();
+
+
+	/************************************/
 	initial_thread->sleep_end_tick = 0;
 
 	initialised = true;
+	/************************************/
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -133,8 +139,6 @@ void thread_start(void)
  Thus, this function runs in an external interrupt context. */
 void thread_tick(void)
 {
-	int64_t current_ticks = timer_ticks();
-
 	struct thread *t = thread_current();
 
 	/* Update statistics. */
@@ -149,7 +153,7 @@ void thread_tick(void)
 
 	if (initialised)
 	{
-		thread_wake(current_ticks);
+		thread_wake(timer_ticks());
 	}
 
 	/* Enforce preemption. */
@@ -426,7 +430,7 @@ static void kernel_thread(thread_func *function, void *aux)
 	function(aux); /* Execute the thread function. */
 	thread_exit(); /* If function() returns, kill the thread. */
 }
-
+
 /* Returns the running thread. */
 struct thread *
 running_thread(void)
