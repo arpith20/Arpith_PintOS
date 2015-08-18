@@ -76,6 +76,11 @@ static void schedule(void);
 void thread_schedule_tail(struct thread *prev);
 static tid_t allocate_tid(void);
 
+/***********************************/
+static bool sort_helper(const struct list_elem *a, const struct list_elem *b,
+		void *aux);
+/**********************************/
+
 /* Initializes the threading system by transforming the code
  that's currently running into a thread.  This can't work in
  general and it is possible in this case only because loader.S
@@ -223,6 +228,16 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
 	/* Add to run queue. */
 	thread_unblock(t);
 
+	//If newly created thread has higher priority than the current thread under
+	//execution, then yield it and hopefully[:)] run the new thread
+	if (!thread_mlfqs)
+	{
+		if (priority > thread_current()->priority)
+		{
+			thread_yield();
+		}
+	}
+
 	return tid;
 }
 
@@ -350,7 +365,8 @@ void thread_foreach(thread_action_func *func, void *aux)
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void thread_set_priority(int new_priority)
 {
-	thread_current()->priority = new_priority;
+	//thread_current()->priority = new_priority;
+	set_thread_priority(thread_current(), new_priority, true);
 }
 
 /* Returns the current thread's priority. */
@@ -630,9 +646,9 @@ inline void thread_wake()
 struct thread * thread_with_max_priority()
 {
 	int max_priority = -1;
-	struct thread *max_thread;
-	struct list_elem *max_elem;
-	struct list_elem *e;
+	struct thread *max_thread = NULL;
+	struct list_elem *max_elem = NULL;
+	struct list_elem *e = NULL;
 
 	for (e = list_begin(&ready_list); e != list_end(&ready_list);
 			e = list_next(e))
@@ -655,5 +671,54 @@ struct thread * thread_with_max_priority()
 	}
 	list_remove(max_elem);
 	return max_thread;
+}
+
+void set_thread_priority(struct thread *t, int new_priority, bool forced)
+{
+	if (thread_mlfqs)
+	{
+
+	}
+	else
+	{
+		if (forced)
+		{
+			t->priority_original = t->priority = new_priority;
+		}
+		else
+		{
+			//control reaches here if the priority has been donated
+		}
+		struct thread *next = list_entry(list_begin(&ready_list), struct thread,
+				elem);
+
+		//ensures that we do not yield a process in ready queue (but not in execution)
+		if (t == thread_current()) //setting priority of current thread
+		{
+			if (next->priority > new_priority)
+			{
+				thread_yield();
+			}
+		}
+
+		list_sort(&ready_list, sort_helper, NULL);
+
+	}
+}
+
+static bool sort_helper(const struct list_elem *a, const struct list_elem *b,
+		void *aux)
+{
+	ASSERT(a != NULL && b!=NULL);
+	struct thread *a_t = list_entry(a, struct thread, elem);
+	struct thread *b_t = list_entry(b, struct thread, elem);
+	if (thread_mlfqs)
+	{
+		return true; //CHANGE THIS
+	}
+	else
+	{
+		return (a_t->priority > b_t->priority);
+	}
 }
 /*******************************************************************/

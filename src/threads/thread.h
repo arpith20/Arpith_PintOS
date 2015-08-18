@@ -120,6 +120,7 @@ extern bool thread_mlfqs;
 inline void thread_wake(void);
 void thread_sleep(int64_t start_time, int64_t no_of_ticks_to_sleep);
 struct thread * thread_with_max_priority(void);
+void set_thread_priority(struct thread *t, int new_priority, bool forced);
 /***********************************************************/
 
 void thread_init(void);
