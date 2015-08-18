@@ -84,8 +84,6 @@ int64_t timer_elapsed(int64_t then)
  be turned on. */
 void timer_sleep(int64_t ticks)
 {
-	int64_t start = timer_ticks();
-
 	ASSERT(intr_get_level() == INTR_ON);
 
 	//Arpith's implementation
@@ -98,9 +96,7 @@ void timer_sleep(int64_t ticks)
 	{
 		enum intr_level original_interrupt_state = intr_disable();
 
-		//calculates the least time the thread remains suspended
-		int64_t end_ticks = start + ticks;
-		thread_sleep(end_ticks);
+		thread_sleep(timer_ticks(), ticks);
 		//printf("thread is about to be blocked\n");	//debug message
 		thread_block();
 		//printf("The thread has been unblocked\n");	//debug message

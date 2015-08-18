@@ -76,7 +76,6 @@ static void schedule(void);
 void thread_schedule_tail(struct thread *prev);
 static tid_t allocate_tid(void);
 
-
 /* Initializes the threading system by transforming the code
  that's currently running into a thread.  This can't work in
  general and it is possible in this case only because loader.S
@@ -110,7 +109,6 @@ void thread_init(void)
 	init_thread(initial_thread, "main", PRI_DEFAULT);
 	initial_thread->status = THREAD_RUNNING;
 	initial_thread->tid = allocate_tid();
-
 
 	/************************************/
 	initial_thread->sleep_end_tick = 0;
@@ -153,7 +151,7 @@ void thread_tick(void)
 
 	if (initialised)
 	{
-		thread_wake(timer_ticks());
+		thread_wake();
 	}
 
 	/* Enforce preemption. */
@@ -193,6 +191,10 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
 	tid_t tid;
 
 	ASSERT(function != NULL);
+
+	/**********************************************/
+	ASSERT(PRI_MIN<=priority && priority<=PRI_MAX);
+	/**********************************************/
 
 	/* Allocate thread. */
 	t = palloc_get_page(PAL_ZERO);
@@ -468,6 +470,11 @@ static void init_thread(struct thread *t, const char *name, int priority)
 	t->priority = priority;
 	t->magic = THREAD_MAGIC;
 
+	/*******************************/
+	t->priority_original = priority;
+	t->sleep_end_tick = 0;
+	/*******************************/
+
 	old_level = intr_disable();
 	list_push_back(&all_list, &t->allelem);
 	intr_set_level(old_level);
@@ -496,8 +503,12 @@ next_thread_to_run(void)
 {
 	if (list_empty(&ready_list))
 		return idle_thread;
-	else
-		return list_entry(list_pop_front(&ready_list), struct thread, elem);
+//	else
+//		return list_entry(list_pop_front(&ready_list), struct thread, elem);
+
+	/**********************************/
+	return thread_with_max_priority();
+	/**********************************/
 }
 
 /* Completes a thread switch by activating the new thread's page
@@ -580,44 +591,69 @@ static tid_t allocate_tid(void)
 	return tid;
 }
 
-//Function to sleep the thread for a specified amount of time
-//void thread_sleep(int64_t finish)
-//{
-//	//list_push_back();
-//	//perform sleep operation here
-//}
-
 /* Offset of `stack' member within `struct thread'.
  Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof(struct thread, stack);
 
 /*******************************************************************/
 // All Functions implemented as part of the assignment is placed here
-void thread_sleep(int64_t end_tick)
+void thread_sleep(int64_t start, int64_t ticks)
 {
 	ASSERT(!intr_context());
 	struct thread *current_thread = thread_current();
-	current_thread->sleep_end_tick = end_tick;
+	current_thread->sleep_end_tick = start + ticks;
 	list_push_back(&alarm_blocked_threads, &current_thread->alarmsleepemem);
 }
 
-void thread_wake(int64_t current_tick)
+inline void thread_wake()
 {
-	struct list_elem *e;
 
 	ASSERT(intr_get_level() == INTR_OFF);
+
+	int64_t current_ticks = timer_ticks();
+	struct list_elem *e;
 
 	for (e = list_begin(&alarm_blocked_threads);
 			e != list_end(&alarm_blocked_threads); e = list_next(e))
 	{
 		struct thread *t = list_entry(e, struct thread, alarmsleepemem);
 		ASSERT(is_thread(t));
-		if (t->sleep_end_tick <= current_tick)
+		if (t->sleep_end_tick <= current_ticks)
 		{
 			t->sleep_end_tick = 0;
 			list_remove(&t->alarmsleepemem);
 			thread_unblock(t);
 		}
 	}
+}
+
+struct thread * thread_with_max_priority()
+{
+	int max_priority = -1;
+	struct thread *max_thread;
+	struct list_elem *max_elem;
+	struct list_elem *e;
+
+	for (e = list_begin(&ready_list); e != list_end(&ready_list);
+			e = list_next(e))
+	{
+		struct thread *t = list_entry(e, struct thread, elem);
+		ASSERT(is_thread(t));
+		if (thread_mlfqs)
+		{
+			//to implement MLFQS
+		}
+		else
+		{
+			if (t->priority > max_priority)
+			{
+				max_thread = t;
+				max_elem = e;
+				max_priority = t->priority;
+			}
+		}
+	}
+	list_remove(max_elem);
+	return max_thread;
 }
 /*******************************************************************/

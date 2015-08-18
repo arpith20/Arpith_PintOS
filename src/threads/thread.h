@@ -106,7 +106,7 @@ struct thread
 	//Members defined for AlarmClock
 	int64_t sleep_end_tick; //defines the time until which the thread must be asleep
 	struct list_elem alarmsleepemem;
-
+	int priority_original; //priority of the thread before donation
 	/**************************/
 };
 
@@ -117,8 +117,9 @@ extern bool thread_mlfqs;
 
 /***********************************************************/
 //this section contains custom function implemented by Arpith
-void thread_wake(int64_t current_ticks);
-void thread_sleep(int64_t end_ticks);
+inline void thread_wake(void);
+void thread_sleep(int64_t start_time, int64_t no_of_ticks_to_sleep);
+struct thread * thread_with_max_priority(void);
 /***********************************************************/
 
 void thread_init(void);
