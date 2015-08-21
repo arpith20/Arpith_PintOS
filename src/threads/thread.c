@@ -103,7 +103,6 @@ void thread_init(void)
 	/*********************************/
 	//Arpith's Implementation
 	list_init(&alarm_blocked_threads); //this list contains the list of all threads blocked by timer_sleep
-
 	/*********************************/
 
 	list_init(&ready_list);
@@ -272,7 +271,8 @@ void thread_unblock(struct thread *t)
 
 	old_level = intr_disable();
 	ASSERT(t->status == THREAD_BLOCKED);
-	list_push_back(&ready_list, &t->elem);
+	list_insert_ordered(&ready_list, &t->elem, sort_helper, NULL);
+	//list_push_back(&ready_list, &t->elem);
 	t->status = THREAD_READY;
 	intr_set_level(old_level);
 }
@@ -366,7 +366,7 @@ void thread_foreach(thread_action_func *func, void *aux)
 void thread_set_priority(int new_priority)
 {
 	//thread_current()->priority = new_priority;
-	set_thread_priority(thread_current(), new_priority, true);
+	set_priority(thread_current(), new_priority, true);
 }
 
 /* Returns the current thread's priority. */
@@ -489,6 +489,8 @@ static void init_thread(struct thread *t, const char *name, int priority)
 	/*******************************/
 	t->priority_original = priority;
 	t->sleep_end_tick = 0;
+	list_init(&t->thread_locks);
+	t->required_lock = NULL;
 	/*******************************/
 
 	old_level = intr_disable();
@@ -639,6 +641,7 @@ inline void thread_wake()
 			t->sleep_end_tick = 0;
 			list_remove(&t->alarmsleepemem);
 			thread_unblock(t);
+			intr_yield_on_return();
 		}
 	}
 }
@@ -673,7 +676,7 @@ struct thread * thread_with_max_priority()
 	return max_thread;
 }
 
-void set_thread_priority(struct thread *t, int new_priority, bool forced)
+void set_priority(struct thread *t, int new_priority, bool forced)
 {
 	if (thread_mlfqs)
 	{
@@ -683,11 +686,14 @@ void set_thread_priority(struct thread *t, int new_priority, bool forced)
 	{
 		if (forced)
 		{
-			t->priority_original = t->priority = new_priority;
+			if (t->priority != t->priority_original)
+				t->priority_original = new_priority;
+			else
+				t->priority_original = t->priority = new_priority;
 		}
 		else
 		{
-			//control reaches here if the priority has been donated
+			t->priority = new_priority;
 		}
 		struct thread *next = list_entry(list_begin(&ready_list), struct thread,
 				elem);
@@ -702,13 +708,17 @@ void set_thread_priority(struct thread *t, int new_priority, bool forced)
 		}
 
 		list_sort(&ready_list, sort_helper, NULL);
-
 	}
+
 }
 
 static bool sort_helper(const struct list_elem *a, const struct list_elem *b,
 		void *aux)
 {
+	if (aux)
+	{
+
+	}
 	ASSERT(a != NULL && b!=NULL);
 	struct thread *a_t = list_entry(a, struct thread, elem);
 	struct thread *b_t = list_entry(b, struct thread, elem);

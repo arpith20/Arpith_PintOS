@@ -107,6 +107,9 @@ struct thread
 	int64_t sleep_end_tick; //defines the time until which the thread must be asleep
 	struct list_elem alarmsleepemem;
 	int priority_original; //priority of the thread before donation
+
+	struct list thread_locks; //list of all the locks the thread has acquired
+	struct lock *required_lock;
 	/**************************/
 };
 
@@ -120,7 +123,7 @@ extern bool thread_mlfqs;
 inline void thread_wake(void);
 void thread_sleep(int64_t start_time, int64_t no_of_ticks_to_sleep);
 struct thread * thread_with_max_priority(void);
-void set_thread_priority(struct thread *t, int new_priority, bool forced);
+void set_priority(struct thread *t, int new_priority, bool forced);
 /***********************************************************/
 
 void thread_init(void);
