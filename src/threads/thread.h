@@ -110,6 +110,10 @@ struct thread
 
 	struct list thread_locks; //list of all the locks the thread has acquired
 	struct lock *required_lock;
+
+	int recent_cpu;
+	int nice;
+	int priority_mlfqs;
 	/**************************/
 };
 
@@ -120,10 +124,25 @@ extern bool thread_mlfqs;
 
 /***********************************************************/
 //this section contains custom function implemented by Arpith
+int load_avg;
+
 inline void thread_wake(void);
 void thread_sleep(int64_t start_time, int64_t no_of_ticks_to_sleep);
 struct thread * thread_with_max_priority(void);
 void set_priority(struct thread *t, int new_priority, bool forced);
+
+inline bool sort_helper(const struct list_elem *a, const struct list_elem *b,
+		void *aux);
+
+inline void mlfqs_computations(struct thread *t);
+inline void fixed_point_real_increment(int *original, int value);
+inline void validate_data(int *data, int type);
+
+inline void calculate_all(void);
+inline void calculate_load_avg(void);
+inline void calculate_recent_cpu(void);
+inline void calculate_priority_mlfqs(void);
+inline void calculate_thread_priority_mlqfs(struct thread *t);
 /***********************************************************/
 
 void thread_init(void);

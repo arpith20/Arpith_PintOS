@@ -42,15 +42,6 @@
  - up or "V": increment the value (and wake up one waiting
  thread, if any). */
 
-/**************************************/
-static bool thread_priority_less_helper(const struct list_elem *a,
-		const struct list_elem *b, void *aux);
-static bool lock_priority_less_helper(const struct list_elem *a,
-		const struct list_elem *b, void *aux);
-static bool sema_priority_less_helper(const struct list_elem *a,
-		const struct list_elem *b, void *aux);
-/**************************************/
-
 void sema_init(struct semaphore *sema, unsigned value)
 {
 	ASSERT(sema != NULL);
@@ -116,15 +107,14 @@ bool sema_try_down(struct semaphore *sema)
 void sema_up(struct semaphore *sema)
 {
 	struct thread *t = NULL;
-	enum intr_level old_level;
 
 	ASSERT(sema != NULL);
 
-	old_level = intr_disable();
+	enum intr_level original_interrupt_state = intr_disable();
 
 	if (!list_empty(&sema->waiters))
 	{
-		list_sort(&sema->waiters, thread_priority_less_helper, NULL);
+		list_sort(&sema->waiters, sort_helper, NULL);
 		t = list_entry(list_pop_front(&sema->waiters), struct thread, elem);
 		thread_unblock(t);
 	}
@@ -133,10 +123,18 @@ void sema_up(struct semaphore *sema)
 	//yield the current thread if the priority of new thread is more
 	if (t != NULL)
 	{
-		if (t->priority > thread_current()->priority)
-			thread_yield();
+		if (thread_mlfqs)
+		{
+			if (t->priority_mlfqs > thread_current()->priority_mlfqs)
+				thread_yield();
+		}
+		else
+		{
+			if (t->priority > thread_current()->priority)
+				thread_yield();
+		}
 	}
-	intr_set_level(old_level);
+	intr_set_level(original_interrupt_state);
 }
 
 static void sema_test_helper(void *sema_);
@@ -210,13 +208,20 @@ void lock_init(struct lock *lock)
  we need to sleep. */
 void lock_acquire(struct lock *lock)
 {
-	struct thread *thread_lock_holder = NULL;
-	struct thread *thread_curr = NULL;
-	struct lock *lock_current = NULL;
-
 	ASSERT(lock != NULL);
 	ASSERT(!intr_context());
 	ASSERT(!lock_held_by_current_thread(lock));
+
+	if (thread_mlfqs)
+	{
+		sema_down(&lock->semaphore);
+		lock->holder = thread_current();
+		return;
+	}
+
+	struct thread *thread_lock_holder = NULL;
+	struct thread *thread_curr = NULL;
+	struct lock *lock_current = NULL;
 
 	thread_lock_holder = lock->holder;
 	thread_curr = thread_current();
@@ -270,8 +275,12 @@ bool lock_try_acquire(struct lock *lock)
 	if (success)
 	{
 		lock->holder = thread_current();
-		lock->holder->required_lock = NULL;
-		list_push_back(&lock->holder->thread_locks, &lock->lock_holder_elem);
+		if (!thread_mlfqs)
+		{
+			lock->holder->required_lock = NULL;
+			list_push_back(&lock->holder->thread_locks,
+					&lock->lock_holder_elem);
+		}
 	}
 
 	return success;
@@ -295,6 +304,9 @@ void lock_release(struct lock *lock)
 
 	lock->holder = NULL;
 	sema_up(&lock->semaphore);
+
+	if (thread_mlfqs)
+		return;
 
 	list_remove(&lock->lock_holder_elem);
 	if (list_empty(&thread_curr->thread_locks))
@@ -369,9 +381,12 @@ void cond_wait(struct condition *cond, struct lock *lock)
 
 	sema_init(&waiter.semaphore, 0);
 
-	waiter.priority = thread_curr->priority;
+	if (!thread_mlfqs)
+	{
+		waiter.priority = thread_curr->priority;
 
-	list_push_back(&cond->waiters, &waiter.elem);
+		list_push_back(&cond->waiters, &waiter.elem);
+	}
 	lock_release(lock);
 	sema_down(&waiter.semaphore);
 	lock_acquire(lock);
@@ -415,47 +430,7 @@ void cond_broadcast(struct condition *cond, struct lock *lock)
 		cond_signal(cond, lock);
 }
 
-static bool thread_priority_less_helper(const struct list_elem *a,
-		const struct list_elem *b, void *aux)
-{
-	if (aux)
-	{
-
-	}
-	ASSERT(a != NULL && b!=NULL);
-	struct thread *a_t = list_entry(a, struct thread, elem);
-	struct thread *b_t = list_entry(b, struct thread, elem);
-	if (thread_mlfqs)
-	{
-		return true; //CHANGE THIS
-	}
-	else
-	{
-		return (a_t->priority > b_t->priority);
-	}
-}
-
-static bool lock_priority_less_helper(const struct list_elem *a,
-		const struct list_elem *b, void *aux)
-{
-	if (aux)
-	{
-
-	}
-	ASSERT(a != NULL && b!=NULL);
-	struct lock *a_t = list_entry(a, struct lock, lock_holder_elem);
-	struct lock *b_t = list_entry(b, struct lock, lock_holder_elem);
-	if (thread_mlfqs)
-	{
-		return true; //CHANGE THIS
-	}
-	else
-	{
-		return (a_t->priority > b_t->priority);
-	}
-}
-
-static bool sema_priority_less_helper(const struct list_elem *a,
+inline bool sema_priority_less_helper(const struct list_elem *a,
 		const struct list_elem *b, void *aux)
 {
 	if (aux)
@@ -473,6 +448,5 @@ static bool sema_priority_less_helper(const struct list_elem *a,
 	{
 		return (a_t->priority > b_t->priority);
 	}
-
 }
 

@@ -76,11 +76,6 @@ static void schedule(void);
 void thread_schedule_tail(struct thread *prev);
 static tid_t allocate_tid(void);
 
-/***********************************/
-static bool sort_helper(const struct list_elem *a, const struct list_elem *b,
-		void *aux);
-/**********************************/
-
 /* Initializes the threading system by transforming the code
  that's currently running into a thread.  This can't work in
  general and it is possible in this case only because loader.S
@@ -142,6 +137,11 @@ void thread_start(void)
 void thread_tick(void)
 {
 	struct thread *t = thread_current();
+
+	if (thread_mlfqs)
+	{
+		mlfqs_computations(t);
+	}
 
 	/* Update statistics. */
 	if (t == idle_thread)
@@ -372,34 +372,63 @@ void thread_set_priority(int new_priority)
 /* Returns the current thread's priority. */
 int thread_get_priority(void)
 {
-	return thread_current()->priority;
+	if (!thread_mlfqs)
+		return thread_current()->priority;
+	return thread_current()->priority_mlfqs;
 }
 
 /* Sets the current thread's nice value to NICE. */
-void thread_set_nice(int nice UNUSED)
+void thread_set_nice(int nice)
 {
-	/* Not yet implemented. */
+	enum intr_level original_interrupt_state = intr_disable();
+	struct thread *t = thread_current();
+	struct list_elem *e;
+
+	validate_data(&nice, 2);
+
+	t->nice = nice;
+
+	t->priority_mlfqs = ((PRI_MAX * (1 << 14)) - (t->recent_cpu / 4)
+			- (t->nice * (1 << 14) * 2)) / (1 << 14);
+	validate_data(&t->priority_mlfqs, 1);
+
+	for (e = list_begin(&ready_list); e != list_end(&ready_list);
+			e = list_next(e))
+	{
+		struct thread *t2 = list_entry(e, struct thread, elem);
+		ASSERT(is_thread(t2));
+		if (t2->priority_mlfqs > t->priority_mlfqs)
+		{
+			thread_yield();
+		}
+	}
+
+	intr_set_level(original_interrupt_state);
 }
 
 /* Returns the current thread's nice value. */
 int thread_get_nice(void)
 {
-	/* Not yet implemented. */
-	return 0;
+	return thread_current()->nice;
 }
 
 /* Returns 100 times the system load average. */
 int thread_get_load_avg(void)
 {
-	/* Not yet implemented. */
-	return 0;
+	enum intr_level original_interrupt_state = intr_disable();
+	int value = ((load_avg * 100) + (1 << 14) / 2) / (1 << 14);
+	intr_set_level(original_interrupt_state);
+	return value;
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int thread_get_recent_cpu(void)
 {
-	/* Not yet implemented. */
-	return 0;
+	struct thread *t = thread_current();
+	enum intr_level original_interrupt_state = intr_disable();
+	int value = ((t->recent_cpu * 100) + (1 << 14) / 2) / (1 << 14);
+	intr_set_level(original_interrupt_state);
+	return value;
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -491,6 +520,13 @@ static void init_thread(struct thread *t, const char *name, int priority)
 	t->sleep_end_tick = 0;
 	list_init(&t->thread_locks);
 	t->required_lock = NULL;
+
+	if (thread_mlfqs)
+	{
+		t->priority_mlfqs = 0;
+		t->priority = 0;
+	}
+	t->nice = 0;
 	/*******************************/
 
 	old_level = intr_disable();
@@ -660,7 +696,12 @@ struct thread * thread_with_max_priority()
 		ASSERT(is_thread(t));
 		if (thread_mlfqs)
 		{
-			//to implement MLFQS
+			if (t->priority_mlfqs > max_priority)
+			{
+				max_thread = t;
+				max_elem = e;
+				max_priority = t->priority_mlfqs;
+			}
 		}
 		else
 		{
@@ -678,11 +719,7 @@ struct thread * thread_with_max_priority()
 
 void set_priority(struct thread *t, int new_priority, bool forced)
 {
-	if (thread_mlfqs)
-	{
-
-	}
-	else
+	if (!thread_mlfqs)
 	{
 		if (forced)
 		{
@@ -709,26 +746,122 @@ void set_priority(struct thread *t, int new_priority, bool forced)
 
 		list_sort(&ready_list, sort_helper, NULL);
 	}
-
 }
 
-static bool sort_helper(const struct list_elem *a, const struct list_elem *b,
-		void *aux)
+//mlfqs computations
+inline void mlfqs_computations(struct thread *t)
 {
-	if (aux)
+	if (initialised)
 	{
+		int64_t current_ticks = timer_ticks();
+		fixed_point_real_increment(&t->recent_cpu, 1);
+		if ((current_ticks % TIMER_FREQ) == 0)
+		{
+			calculate_all();
+		}
+		if ((current_ticks % 4) == 0)
+		{
+			calculate_thread_priority_mlqfs(t);
+		}
+	}
+}
+
+inline void calculate_all()
+{
+	calculate_load_avg();
+	calculate_recent_cpu();
+	calculate_priority_mlfqs();
+}
+
+inline void calculate_load_avg()
+{
+	int ready_threads, coefficient;
+
+	ready_threads = list_size(&ready_list);
+	if (thread_current() != idle_thread)
+	{
+		ready_threads = ready_threads + 1;
+	}
+
+	ready_threads = (ready_threads * (1 << 14)) / 60;
+
+	coefficient = (59 * (1 << 14)) / 60;
+
+	load_avg = (((int64_t) load_avg) * coefficient / (1 << 14)) + ready_threads;
+}
+inline void calculate_recent_cpu()
+{
+	ASSERT(intr_get_level() == INTR_OFF);
+
+	struct list_elem *e;
+	int coefficient;
+
+	for (e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e))
+	{
+		struct thread *t = list_entry(e, struct thread, allelem);
+		ASSERT(is_thread(t));
+
+		/*Note from the PintOS Documentation:
+		 *You may need to think about the order of calculations in this formula.
+		 *
+		 *We recommend computing the coefficient of recent_cpu first,
+		 *then multiplying.
+		 *Some students have reported that multiplying load_avg by recent_cpu
+		 *directly can cause overflow.
+		 */
+		coefficient = (((int64_t) (2 * load_avg)) * (1 << 14))
+				/ (2 * load_avg + (1 * (1 << 14)));
+		t->recent_cpu = (((int64_t) coefficient) * t->recent_cpu / (1 << 14))
+				+ (t->nice * (1 << 14));
 
 	}
-	ASSERT(a != NULL && b!=NULL);
-	struct thread *a_t = list_entry(a, struct thread, elem);
-	struct thread *b_t = list_entry(b, struct thread, elem);
-	if (thread_mlfqs)
+}
+inline void calculate_priority_mlfqs()
+{
+	ASSERT(intr_get_level() == INTR_OFF);
+
+	struct list_elem *e;
+
+	for (e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e))
 	{
-		return true; //CHANGE THIS
+		struct thread *t = list_entry(e, struct thread, allelem);
+		ASSERT(is_thread(t));
+
+		calculate_thread_priority_mlqfs(t);
 	}
-	else
+}
+
+inline void calculate_thread_priority_mlqfs(struct thread *t)
+{
+	ASSERT(intr_get_level() == INTR_OFF);
+	t->priority_mlfqs = (((PRI_MAX * (1 << 14)) - (t->recent_cpu / 4)
+			- (t->nice * 2 * (1 << 14))) / (1 << 14));
+	validate_data(&t->priority_mlfqs, 1);
+}
+
+inline void validate_data(int *data, int type)
+{
+	switch (type)
 	{
-		return (a_t->priority > b_t->priority);
+	case 1: //validate priority
+		if (*data > PRI_MAX)
+			*data = PRI_MAX;
+		if (*data < PRI_MIN)
+			*data = PRI_MIN;
+		break;
+	case 2:	//validate nice value
+		if (*data > 20)
+			*data = 20;
+		if (*data < (-20))
+			*data = -20;
+		break;
+	default:
+		ASSERT(false);
 	}
+}
+
+inline void fixed_point_real_increment(int *original, int value)
+{
+	*original = ((*original) + (value * (1 << 14)));
 }
 /*******************************************************************/
