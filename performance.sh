@@ -6,7 +6,7 @@ echo "building"
 make
 echo "running alarm-signal"
 cd build
-pintos --qemu -- -q run alarm-signal
+pintos --qemu -- -q run alarm-single
 START=$SECONDS
 make check
 END=$SECONDS

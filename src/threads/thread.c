@@ -19,7 +19,7 @@
 /* Random value for struct thread's `magic' member.
  Used to detect stack overflow.  See the big comment at the top
  of thread.h for details. */
-#define THREAD_MAGIC 0xdeadbeef
+#define THREAD_MAGIC 0xdeadbeef //LOL :D
 
 /* List of processes in THREAD_READY state, that is, processes
  that are ready to run but not actually running. */
@@ -32,9 +32,11 @@ static struct list all_list;
 /* Idle thread. */
 static struct thread *idle_thread;
 
+/************************************/
 /* List of all the threads that are sleeping and waiting for the timer to expire*/
 static struct list alarm_blocked_threads;
 static bool initialised = false;
+/************************************/
 
 /* Initial thread, the thread running init.c:main(). */
 static struct thread *initial_thread;
@@ -197,6 +199,7 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
 	ASSERT(function != NULL);
 
 	/**********************************************/
+	//determines the validity of input arguments
 	ASSERT(PRI_MIN<=priority && priority<=PRI_MAX);
 	/**********************************************/
 
@@ -229,6 +232,9 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
 
 	//If newly created thread has higher priority than the current thread under
 	//execution, then yield it and hopefully[:)] run the new thread
+	//--
+	//In case of Advanced scheduler, do not yield the current thread
+	//immediately, instead let the scheduler decide at a later stage
 	if (!thread_mlfqs)
 	{
 		if (priority > thread_current()->priority)
@@ -365,16 +371,14 @@ void thread_foreach(thread_action_func *func, void *aux)
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void thread_set_priority(int new_priority)
 {
-	//thread_current()->priority = new_priority;
+	//thread_current()->priority = new_priority; //original code
 	set_priority(thread_current(), new_priority, true);
 }
 
 /* Returns the current thread's priority. */
 int thread_get_priority(void)
 {
-	if (!thread_mlfqs)
-		return thread_current()->priority;
-	return thread_current()->priority_mlfqs;
+	return thread_current()->priority;
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -388,19 +392,23 @@ void thread_set_nice(int nice)
 
 	t->nice = nice;
 
-	t->priority_mlfqs = ((PRI_MAX * (1 << 14)) - (t->recent_cpu / 4)
+	t->priority = ((PRI_MAX * (1 << 14)) - (t->recent_cpu / 4)
 			- (t->nice * (1 << 14) * 2)) / (1 << 14);
-	validate_data(&t->priority_mlfqs, 1);
+	validate_data(&t->priority, 1);
 
+	//Yield the current thread immediately if it's priority becomes less than
+	//some other thread in ready list
 	for (e = list_begin(&ready_list); e != list_end(&ready_list);
 			e = list_next(e))
 	{
 		struct thread *t2 = list_entry(e, struct thread, elem);
 		ASSERT(is_thread(t2));
-		if (t2->priority_mlfqs > t->priority_mlfqs)
+
+		if (t2->priority > t->priority)
 		{
 			thread_yield();
 		}
+
 	}
 
 	intr_set_level(original_interrupt_state);
@@ -523,8 +531,8 @@ static void init_thread(struct thread *t, const char *name, int priority)
 
 	if (thread_mlfqs)
 	{
-		t->priority_mlfqs = 0;
-		t->priority = 0;
+		t->priority = 0; /*Initially the priorities of all processes is zero
+		 in case of Advanced scheduler*/
 	}
 	t->nice = 0;
 	/*******************************/
@@ -561,6 +569,7 @@ next_thread_to_run(void)
 //		return list_entry(list_pop_front(&ready_list), struct thread, elem);
 
 	/**********************************/
+	//this function returns the function with maximum priority in ready list
 	return thread_with_max_priority();
 	/**********************************/
 }
@@ -694,24 +703,14 @@ struct thread * thread_with_max_priority()
 	{
 		struct thread *t = list_entry(e, struct thread, elem);
 		ASSERT(is_thread(t));
-		if (thread_mlfqs)
+
+		if (t->priority > max_priority)
 		{
-			if (t->priority_mlfqs > max_priority)
-			{
-				max_thread = t;
-				max_elem = e;
-				max_priority = t->priority_mlfqs;
-			}
+			max_thread = t;
+			max_elem = e;
+			max_priority = t->priority;
 		}
-		else
-		{
-			if (t->priority > max_priority)
-			{
-				max_thread = t;
-				max_elem = e;
-				max_priority = t->priority;
-			}
-		}
+
 	}
 	list_remove(max_elem);
 	return max_thread;
@@ -719,6 +718,12 @@ struct thread * thread_with_max_priority()
 
 void set_priority(struct thread *t, int new_priority, bool forced)
 {
+	/*Extract from PintOS documentation:
+	 *
+	 *Like the priority scheduler, the advanced scheduler chooses
+	 *the thread to run based on priorities. However, the advanced
+	 *the scheduler does not do priority donation
+	 */
 	if (!thread_mlfqs)
 	{
 		if (forced)
@@ -834,12 +839,12 @@ inline void calculate_priority_mlfqs()
 inline void calculate_thread_priority_mlqfs(struct thread *t)
 {
 	ASSERT(intr_get_level() == INTR_OFF);
-	t->priority_mlfqs = (((PRI_MAX * (1 << 14)) - (t->recent_cpu / 4)
+	t->priority = (((PRI_MAX * (1 << 14)) - (t->recent_cpu / 4)
 			- (t->nice * 2 * (1 << 14))) / (1 << 14));
-	validate_data(&t->priority_mlfqs, 1);
+	validate_data(&t->priority, 1);
 }
 
-inline void validate_data(int *data, int type)
+inline void validate_data(int *data, int type) //1-priority; 2-nice value
 {
 	switch (type)
 	{
@@ -856,7 +861,8 @@ inline void validate_data(int *data, int type)
 			*data = -20;
 		break;
 	default:
-		ASSERT(false);
+		ASSERT(false)
+		;
 	}
 }
 

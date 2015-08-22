@@ -108,12 +108,13 @@ struct thread
 	struct list_elem alarmsleepemem;
 	int priority_original; //priority of the thread before donation
 
+	//Members primarily defined for priority scheduler
 	struct list thread_locks; //list of all the locks the thread has acquired
 	struct lock *required_lock;
 
+	//Members exclusively defined for advanced scheduler
 	int recent_cpu;
 	int nice;
-	int priority_mlfqs;
 	/**************************/
 };
 

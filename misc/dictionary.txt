@@ -2,3 +2,8 @@ arpith
 contrariwisenachos
 mlfqs
 multi
+contrariwise
+reacquired
+mesa
+hoare
+recheck

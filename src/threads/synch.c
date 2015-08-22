@@ -123,16 +123,8 @@ void sema_up(struct semaphore *sema)
 	//yield the current thread if the priority of new thread is more
 	if (t != NULL)
 	{
-		if (thread_mlfqs)
-		{
-			if (t->priority_mlfqs > thread_current()->priority_mlfqs)
-				thread_yield();
-		}
-		else
-		{
-			if (t->priority > thread_current()->priority)
-				thread_yield();
-		}
+		if (t->priority > thread_current()->priority)
+			thread_yield();
 	}
 	intr_set_level(original_interrupt_state);
 }
@@ -440,13 +432,8 @@ inline bool sema_priority_less_helper(const struct list_elem *a,
 	ASSERT(a != NULL && b!=NULL);
 	struct semaphore_elem *a_t = list_entry(a, struct semaphore_elem, elem);
 	struct semaphore_elem *b_t = list_entry(b, struct semaphore_elem, elem);
-	if (thread_mlfqs)
-	{
-		return true; //CHANGE THIS
-	}
-	else
-	{
-		return (a_t->priority > b_t->priority);
-	}
+
+	return (a_t->priority > b_t->priority);
+
 }
 
