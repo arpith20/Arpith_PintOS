@@ -155,6 +155,8 @@ void thread_tick(void)
 	else
 		kernel_ticks++;
 
+	//Wake up any threads sleeping
+	//Wakes up all threads whose timer has expired
 	if (initialised)
 	{
 		thread_wake();
@@ -277,8 +279,7 @@ void thread_unblock(struct thread *t)
 
 	old_level = intr_disable();
 	ASSERT(t->status == THREAD_BLOCKED);
-	list_insert_ordered(&ready_list, &t->elem, sort_helper, NULL);
-	//list_push_back(&ready_list, &t->elem);
+	list_push_back(&ready_list, &t->elem);
 	t->status = THREAD_READY;
 	intr_set_level(old_level);
 }
@@ -665,7 +666,8 @@ void thread_sleep(int64_t start, int64_t ticks)
 	ASSERT(!intr_context());
 	struct thread *current_thread = thread_current();
 	current_thread->sleep_end_tick = start + ticks;
-	list_push_back(&alarm_blocked_threads, &current_thread->alarmsleepemem);
+	list_push_back(&alarm_blocked_threads, &current_thread->alarmsleepelem);
+	thread_block();
 }
 
 inline void thread_wake()
@@ -679,12 +681,12 @@ inline void thread_wake()
 	for (e = list_begin(&alarm_blocked_threads);
 			e != list_end(&alarm_blocked_threads); e = list_next(e))
 	{
-		struct thread *t = list_entry(e, struct thread, alarmsleepemem);
+		struct thread *t = list_entry(e, struct thread, alarmsleepelem);
 		ASSERT(is_thread(t));
 		if (t->sleep_end_tick <= current_ticks)
 		{
 			t->sleep_end_tick = 0;
-			list_remove(&t->alarmsleepemem);
+			list_remove(&t->alarmsleepelem);
 			thread_unblock(t);
 			intr_yield_on_return();
 		}
@@ -737,6 +739,8 @@ void set_priority(struct thread *t, int new_priority, bool forced)
 		{
 			t->priority = new_priority;
 		}
+
+		list_sort(&ready_list, sort_helper, NULL);
 		struct thread *next = list_entry(list_begin(&ready_list), struct thread,
 				elem);
 
@@ -748,8 +752,6 @@ void set_priority(struct thread *t, int new_priority, bool forced)
 				thread_yield();
 			}
 		}
-
-		list_sort(&ready_list, sort_helper, NULL);
 	}
 }
 

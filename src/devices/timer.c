@@ -97,9 +97,7 @@ void timer_sleep(int64_t ticks)
 		enum intr_level original_interrupt_state = intr_disable();
 
 		thread_sleep(timer_ticks(), ticks);
-		//printf("thread is about to be blocked\n");	//debug message
-		thread_block();
-		//printf("The thread has been unblocked\n");	//debug message
+
 		intr_set_level(original_interrupt_state);
 	}
 

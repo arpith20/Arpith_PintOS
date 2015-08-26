@@ -105,7 +105,7 @@ struct thread
 	//Members defined by Arpith
 	//Members defined for AlarmClock
 	int64_t sleep_end_tick; //defines the time until which the thread must be asleep
-	struct list_elem alarmsleepemem;
+	struct list_elem alarmsleepelem;
 	int priority_original; //priority of the thread before donation
 
 	//Members primarily defined for priority scheduler

@@ -243,9 +243,10 @@ void lock_acquire(struct lock *lock)
 	}
 
 	sema_down(&lock->semaphore);
-	lock->holder = thread_current();
 
+	lock->holder = thread_current();
 	lock->holder->required_lock = NULL;
+
 	list_push_back(&lock->holder->thread_locks, &lock->lock_holder_elem);
 
 }
@@ -285,7 +286,6 @@ bool lock_try_acquire(struct lock *lock)
  handler. */
 void lock_release(struct lock *lock)
 {
-	struct list_elem *next = NULL;
 	struct lock *next_lock = NULL;
 	struct thread *thread_curr = NULL;
 
@@ -307,8 +307,7 @@ void lock_release(struct lock *lock)
 	{
 		list_sort(&thread_curr->thread_locks, lock_priority_less_helper,
 		NULL);
-		next = list_front(&thread_curr->thread_locks);
-		next_lock = list_entry(next, struct lock, lock_holder_elem);
+		next_lock = list_entry(list_begin(&thread_curr->thread_locks), struct lock, lock_holder_elem);
 		set_priority(thread_curr, next_lock->priority, false);
 	}
 }
