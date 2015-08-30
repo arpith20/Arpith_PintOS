@@ -106,9 +106,9 @@ struct thread
 	//Members defined for AlarmClock
 	int64_t sleep_end_tick; //defines the time until which the thread must be asleep
 	struct list_elem alarmsleepelem;
-	int priority_original; //priority of the thread before donation
 
 	//Members primarily defined for priority scheduler
+	int priority_original; //priority of the thread before donation
 	struct list thread_locks; //list of all the locks the thread has acquired
 	struct lock *required_lock;
 

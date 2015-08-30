@@ -530,11 +530,6 @@ static void init_thread(struct thread *t, const char *name, int priority)
 	list_init(&t->thread_locks);
 	t->required_lock = NULL;
 
-	if (thread_mlfqs)
-	{
-		t->priority = 0; /*Initially the priorities of all processes is zero
-		 in case of Advanced scheduler*/
-	}
 	t->nice = 0;
 	/*******************************/
 

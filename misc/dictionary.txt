@@ -7,3 +7,5 @@ reacquired
 mesa
 hoare
 recheck
+func
+aux

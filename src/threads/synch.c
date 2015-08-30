@@ -307,7 +307,8 @@ void lock_release(struct lock *lock)
 	{
 		list_sort(&thread_curr->thread_locks, lock_priority_less_helper,
 		NULL);
-		next_lock = list_entry(list_begin(&thread_curr->thread_locks), struct lock, lock_holder_elem);
+		next_lock = list_entry(list_begin(&thread_curr->thread_locks),
+				struct lock, lock_holder_elem);
 		set_priority(thread_curr, next_lock->priority, false);
 	}
 }

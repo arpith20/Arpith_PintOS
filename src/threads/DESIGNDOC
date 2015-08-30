@@ -33,7 +33,7 @@ Arpith K <arpith@live.com> or <arpith.k@csa.iisc.ernet.in>
 	The following are the global variables declared in the implementation of
 	the ALARM CLOCK feature.
 
-		static bool initialised = false; 
+		static bool initialised = false;
 			A boolean variable to determine if at least one thread (idle
 			thread) has been  initialized or not.
 
@@ -161,16 +161,65 @@ Arpith K <arpith@live.com> or <arpith.k@csa.iisc.ernet.in>
 >> Use ASCII art to diagram a nested donation.  (Alternately, submit a
 >> .png file.)
 
+	The thread structure has been modified to include a new data member which
+	stores the original value of it's priority in case it receives a priority
+	from another thread. This is used to restore the value of priority once it
+	releases the lock.
+
+	I explicitly do not keep track of which thread donated the priority to the
+	thread holding the lock. In terms of implementation, it is easier if I
+	just ensure that the lock holder thread has the priority equal to that of
+	a highest priority thread waiting on the former directly or indirectly (in
+	nested form). When a thread tries to acquire a lock, I would iteratively
+	propagate the the value of priority through the chain (for example see
+	attached diagram) to ensure that the each thread holder in the chain has
+	the highest priority.
+
+	Please view the file named src/threads/DOC_B2.png to understand nested
+	donation. In the example, let's say that we have three locks namely lock1,
+	lock2 and lock3. Consider we have four threads t1(original priority 3),
+	t2(10), t3(31) and t4(56) trying to acquire locks (refer diagram) in that
+	order. The way this priority is donated iteratively, is shown.
+
+	The diagram clearly shows how the thread t4 donates it's priority to t1.
+	
+
 ---- ALGORITHMS ----
 
 >> B3: How do you ensure that the highest priority thread waiting for
 >> a lock, semaphore, or condition variable wakes up first?
+	
+	I am using the list_sort function on the waiting list to bring the thread
+	with maximum priority to the front of the list just before the need to
+	potentially wake it up arises.
+
+	This ensures that the thread with highest priority us woken up.
 
 >> B4: Describe the sequence of events when a call to lock_acquire()
 >> causes a priority donation.  How is nested donation handled?
 
+	There exists a need to donate the priority of the thread trying to acquire
+	the lock to the one holding the lock whenever the later has lesser
+	priority than the former. Failing to do this can cause the problem of
+	priority inversion.
+
+	The lock_acquire() function iteratively checks whether the thread trying
+	to acquire the lock has higher priority than the one holding it. If so,
+	the priority is donated. The iteration is required to handle the condition
+	where in nested donation is required.
+
 >> B5: Describe the sequence of events when lock_release() is called
 >> on a lock that a higher-priority thread is waiting for.
+	
+	The following are the set to events that occur when lock_release is
+	called.
+	1.	lock->holder is set to NULL and the semaphore is upped.
+	2.	Remove the lock from the list of locks that the thread holds. 
+	3a. If the list at this point is empty (ie, the current thread holds no
+        more locks), then restore the original priority of that thread.
+    3b. Otherwise, set the priority of the thread holding that lock to that of
+        the the thread with highest priority directly or indirectly waiting on
+        it.
 
 ---- SYNCHRONIZATION ----
 
@@ -178,11 +227,19 @@ Arpith K <arpith@live.com> or <arpith.k@csa.iisc.ernet.in>
 >> how your implementation avoids it.  Can you use a lock to avoid
 >> this race?
 
+	A race condition may occur only if multiple threads tries to modify the
+	value of priority at the same time. This is not possible in my
+	implementation. Any thread can modify their own priority only.
+
 ---- RATIONALE ----
 
 >> B7: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
 
+	During the design phase of this project a number of implementation options
+	were considered. Finally a design which I felt would have the least
+	overhead in terms of the number of additional data structures required and
+	execution time of the code was implemented.
 
 
 			  ADVANCED SCHEDULER
@@ -193,6 +250,19 @@ Arpith K <arpith@live.com> or <arpith.k@csa.iisc.ernet.in>
 >> C1: Copy here the declaration of each new or changed `struct' or
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
+
+	threads/thread.h
+	The thread structure was modified to include the following data members to
+	aid the implementation of the advanced scheduler
+		
+		int recent_cpu;
+			This data member tracks how much CPU a thread has used recently.
+
+		int nice;
+			Nice value is used to increase or decrease the effective priority
+			of a thread. A positive value decreases the priority of the thread
+			and causes it to give up some CPU time. A negative nice value has
+			an opposite effect.
 
 ---- ALGORITHMS ----
 
@@ -207,9 +277,9 @@ ticks   A   B   C   A   B   C   to run
  0
  4
  8
-12
-16
-20
+12	PLEASE VIEW /src/threads/DOC_C2_AdvancedScheduler.png
+16					         OR
+20		 /src/threads/DOC_C2_AdvancedScheduler.ods
 24
 28
 32
@@ -218,6 +288,11 @@ ticks   A   B   C   A   B   C   to run
 >> C3: Did any ambiguities in the scheduler specification make values
 >> in the table uncertain?  If so, what rule did you use to resolve
 >> them?  Does this match the behavior of your scheduler?
+
+	The scheduler specification does not indicate what happens when the
+	priorities of two threads are equal. The values in the table can be
+	different depending in the disambiguation protocol. I a simple round robin
+	method has been employed by me.
 
 >> C4: How is the way you divided the cost of scheduling between code
 >> inside and outside interrupt context likely to affect performance?
@@ -256,7 +331,7 @@ ticks   A   B   C   A   B   C   to run
 	Due to lack of time, I did not implement abstractions for other math 
 	operations. It was faster for me to implement it by manually performing
 	the math as specified in the PintOS documentation (Section B.6) provided
-	by stanford.
+	by Stanford.
 
 
 			   SURVEY QUESTIONS
@@ -271,13 +346,13 @@ the quarter.
 >> In your opinion, was this assignment, or any one of the three problems
 >> in it, too easy or too hard?  Did it take too long or too little time?
 
-	As it might be apparent from my commit history in BitBucket, the task of PRIORITY
-	SCHEDULING took the maximum time to implement. It also took a considerable
-	amount of time to go through the documentation and understand the original
-	PintOS code.
+	As it might be apparent from my commit history in BitBucket, the task of
+	PRIORITY SCHEDULING took the maximum time to implement. It also took a
+	considerable amount of time to go through the documentation and understand
+	the original PintOS code.
 
-	The alarm clock was the easiest to implement of the three. 
-	In case of Advanced scheduler, while the implementation itself is straightforward,
+	The alarm clock was the easiest to implement of the three. In case of
+	Advanced scheduler, while the implementation itself is straightforward,
 	the task of understanding the BSD scheduler and all its quirks (*cough*
 	Fixed-Point Real Arithmetic *cough*) was critical and took the majority of
 	the time.
@@ -285,8 +360,8 @@ the quarter.
 >> Did you find that working on a particular part of the assignment gave
 >> you greater insight into some aspect of OS design?
 
-	Definitely. After working on this project, I'll think twice before cursing
-	Microsoft for all the bugs in their OS.
+	Definitely. After working on this project, I'll think twice before
+	criticize Microsoft for all the bugs in their OS.
 
 >> Is there some particular fact or hint we should give students in
 >> future quarters to help them solve the problems?  Conversely, did you
