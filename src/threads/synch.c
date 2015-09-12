@@ -121,7 +121,7 @@ void sema_up(struct semaphore *sema)
 	sema->value++;
 
 	//yield the current thread if the priority of new thread is more
-	if (t != NULL)
+	if (t != NULL && !intr_context())
 	{
 		if (t->priority > thread_current()->priority)
 			thread_yield();
