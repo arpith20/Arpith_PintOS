@@ -280,6 +280,11 @@ static void run_task(char **argv)
 {
 	const char *task = argv[1];
 
+	/*****************************/
+	//this function is defined in process.c file
+	strip_extra_spaces(task);
+	/*****************************/
+
 	printf("Executing '%s':\n", task);
 #ifdef USERPROG
 	process_wait (process_execute (task));

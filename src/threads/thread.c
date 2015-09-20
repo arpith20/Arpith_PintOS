@@ -150,7 +150,7 @@ void thread_tick(void)
 		idle_ticks++;
 #ifdef USERPROG
 	else if (t->pagedir != NULL)
-	user_ticks++;
+		user_ticks++;
 #endif
 	else
 		kernel_ticks++;
@@ -245,6 +245,19 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
 		}
 	}
 
+#ifdef USERPROG
+	sema_init(&t->sema_wait, 0);
+	sema_init(&t->sema_exit, 0);
+	t->ret_status = RET_STATUS_OK;	//Initialize return status with 0;
+
+	list_init(&t->children);
+	t->exited = false;
+	t->waited = false;
+	t->parent = thread_current();
+	if (thread_current() != initial_thread)
+		list_push_back(&thread_current()->children, &t->child_elem);
+#endif
+
 	return tid;
 }
 
@@ -323,7 +336,7 @@ void thread_exit(void)
 	ASSERT(!intr_context());
 
 #ifdef USERPROG
-	process_exit ();
+	process_exit();
 #endif
 
 	/* Remove thread from all threads list, set our status to dying,
@@ -600,7 +613,7 @@ void thread_schedule_tail(struct thread *prev)
 
 #ifdef USERPROG
 	/* Activate the new address space. */
-	process_activate ();
+	process_activate();
 #endif
 
 	/* If the thread we switched from is dying, destroy its struct
@@ -866,5 +879,21 @@ inline void validate_data(int *data, int type) //1-priority; 2-nice value
 inline void fixed_point_real_increment(int *original, int value)
 {
 	*original = ((*original) + (value * (1 << 14)));
+}
+
+struct thread *
+tid_to_thread(tid_t tid)
+{
+	struct list_elem *e;
+
+	for (e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e))
+	{
+		struct thread *t = list_entry(e, struct thread, allelem);
+		ASSERT(is_thread(t));
+		if (t->tid == tid)
+			return t;
+	}
+
+	return NULL;
 }
 /*******************************************************************/
