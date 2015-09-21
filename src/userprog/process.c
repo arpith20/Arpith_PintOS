@@ -48,10 +48,10 @@ tid_t process_execute(const char *file_name)
 	if (fn_copy2 == NULL)
 		return TID_ERROR;
 	strlcpy(fn_copy2, file_name, PGSIZE);
-	file_name = strtok_r(fn_copy2, " ", &save_ptr);
 
 	/* Create a new thread to execute FILE_NAME. */
-	tid = thread_create(file_name, PRI_DEFAULT, start_process, fn_copy);
+	tid = thread_create(strtok_r(fn_copy2, " ", &save_ptr), PRI_DEFAULT,
+			start_process, fn_copy);
 
 	if (tid == TID_ERROR)
 	{
@@ -91,7 +91,7 @@ static void start_process(void *file_name_)
 	if (success)
 	{
 		//push arguments to stack
-		int no_of_arguments=0;
+		int no_of_arguments = 0;
 		int argc = 0, length;
 		void* sp;
 
@@ -108,17 +108,17 @@ static void start_process(void *file_name_)
 			argument = strtok_r(NULL, " ", &saveptr);
 		}
 
-		// save pointer to last argument
+		//save pointer to last argument
 		last_arg_ptr = (char*) sp;
 
 		//word align
 		sp = (void *) ((int32_t) sp & 0xfffffffc);
 
-		// Push null
+		//push null
 		sp = (((char**) sp) - 1);
 		*((char*) (sp)) = 0;
 
-		// Pointers to arguments
+		//pointers to arguments
 		while (no_of_arguments < argc)
 		{
 			while (*(last_arg_ptr - 1) != '\0')
@@ -129,18 +129,17 @@ static void start_process(void *file_name_)
 			last_arg_ptr++;
 		}
 
-		// push argv
+		//push argv
 		char** first_arg_ptr = (char**) sp;
 		sp = (((char**) sp) - 1);
 		*((char***) sp) = first_arg_ptr;
 
-		// Push argc
+		//push argc
 		int* stack_int_ptr = (int*) sp;
 		*(--stack_int_ptr) = argc;
 		sp = (void*) stack_int_ptr;
 
-
-		// Push null
+		//push null
 		sp = (((void**) sp) - 1);
 		*((void**) (sp)) = 0;
 
@@ -186,14 +185,15 @@ static void start_process(void *file_name_)
  does nothing. */
 int process_wait(tid_t child_tid UNUSED)
 {
-	struct thread *t, *cur;
+	struct thread *t, *current_thread;
 
-	cur = thread_current();
+	current_thread = thread_current();
 	t = tid_to_thread(child_tid);
 
-	if (t == NULL || t->parent != cur || t->waited)
+	if (t == NULL || t->parent != current_thread || t->waited)
 		return RET_STATUS_ERROR;	//return error
-	else if (t->ret_status != RET_STATUS_OK || t->exited == true)
+
+	if (t->ret_status != RET_STATUS_OK || t->exited == true)
 		return t->ret_status;
 
 	sema_down(&t->sema_wait);
@@ -209,8 +209,6 @@ void process_exit(void)
 {
 	struct thread *cur = thread_current();
 	uint32_t *pd;
-
-	printf("%s: exit(%d)\n", cur->name, cur->ret_status);
 
 	if (cur->exec != NULL)
 		file_allow_write(cur->exec);
@@ -583,7 +581,7 @@ static bool install_page(void *upage, void *kpage, bool writable)
 /********************************************************/
 void strip_extra_spaces(const char* str_orig)
 {
-	char *str = (char *)str_orig;
+	char *str = (char *) str_orig;
 	int i, x;
 	for (i = x = 1; str[i]; ++i)
 		if (!isspace(str[i]) || (i > 0 && !isspace(str[i - 1])))

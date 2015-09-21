@@ -9,3 +9,5 @@ hoare
 recheck
 func
 aux
+loadable
+printf

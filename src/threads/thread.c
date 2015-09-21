@@ -248,14 +248,15 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
 #ifdef USERPROG
 	sema_init(&t->sema_wait, 0);
 	sema_init(&t->sema_exit, 0);
+
+	list_init(&t->files);
+
 	t->ret_status = RET_STATUS_OK;	//Initialize return status with 0;
 
-	list_init(&t->children);
 	t->exited = false;
 	t->waited = false;
 	t->parent = thread_current();
-	if (thread_current() != initial_thread)
-		list_push_back(&thread_current()->children, &t->child_elem);
+
 #endif
 
 	return tid;

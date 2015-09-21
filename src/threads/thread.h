@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include "threads/synch.h"
 
+#include "filesys/filesys.h"
+
 /* States in a thread's life cycle. */
 enum thread_status
 {
@@ -108,8 +110,7 @@ struct thread
 
 	struct file *exec;// Points to the file containing thread executable
 
-	struct list children;// List of all children process of the current thread
-	struct list_elem child_elem;// List elem for children list
+	struct list files; //Files opened by the current thread
 
 	int ret_status;// Return status.
 
@@ -133,6 +134,13 @@ struct thread
 	int recent_cpu;
 	int nice;
 	/**************************/
+};
+
+struct file_struct
+{
+	int fid;
+	struct list_elem thread_file_elem;
+	struct file *f;
 };
 
 /* If false (default), use round-robin scheduler.
