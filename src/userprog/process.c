@@ -195,7 +195,7 @@ int process_wait(tid_t child_tid UNUSED)
 
 	if (t == NULL || t->parent != current_thread || t->waited)
 		return RET_STATUS_ERROR;	//return error
-
+	t->waited = true;
 	if (t->ret_status != RET_STATUS_OK || t->exited == true)
 		return t->ret_status;
 
