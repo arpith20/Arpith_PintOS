@@ -100,11 +100,15 @@ struct thread
 	/* Owned by userprog/process.c. */
 	uint32_t *pagedir; /* Page directory. */
 
-	bool exited; // True - process has exited
-	bool waited;
+	/****************************************************************************/
+	//The following members are required for implementing project 2
 
-	struct semaphore sema_wait;// Semaphore -- process_wait.
-	struct semaphore sema_exit;// Semaphore -- process_exit.
+	bool process_exited; // True - process has exited
+	bool process_waited;
+
+	struct semaphore sema_process_load;// Semaphore -- for synchronization of load operation.
+	struct semaphore sema_process_wait;// Semaphore -- for synchronization of wait operation.
+	struct semaphore sema_process_exit;// Semaphore -- for synchronization of exit operation.
 
 	struct thread *parent;// Parent process of the thread in question
 
@@ -112,8 +116,9 @@ struct thread
 
 	struct list files; //Files opened by the current thread
 
-	int ret_status;// Return status.
+	int return_status;// Return status of the thread after appropriate operation.
 
+	/*****************************************************************************/
 #endif
 
 	/* Owned by thread.c. */

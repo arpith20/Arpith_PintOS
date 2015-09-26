@@ -246,15 +246,17 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
 	}
 
 #ifdef USERPROG
-	sema_init(&t->sema_wait, 0);
-	sema_init(&t->sema_exit, 0);
+
+	sema_init(&t->sema_process_wait, 0);
+	sema_init(&t->sema_process_load, 0);
+	sema_init(&t->sema_process_exit, 0);
 
 	list_init(&t->files);
 
-	t->ret_status = RET_STATUS_OK;	//Initialize return status with 0;
+	t->return_status = RET_STATUS_OK;	//Initialize return status with 0;
 
-	t->exited = false;
-	t->waited = false;
+	t->process_exited = false;
+	t->process_waited = false;
 	t->parent = thread_current();
 
 #endif
@@ -890,7 +892,9 @@ tid_to_thread(tid_t tid)
 	for (e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e))
 	{
 		struct thread *t = list_entry(e, struct thread, allelem);
+
 		ASSERT(is_thread(t));
+
 		if (t->tid == tid)
 			return t;
 	}

@@ -5,6 +5,9 @@
 
 void syscall_init(void);
 
+//data members
+struct lock file_lock;
+
 //Implemented system calls
 void system_call_halt(void);									 //CallNumber: 0
 void system_call_exit(int status);								 //CallNumber: 1

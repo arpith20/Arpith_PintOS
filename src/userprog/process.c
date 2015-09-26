@@ -30,7 +30,7 @@ static bool load(const char *cmdline, void (**eip)(void), void **esp);
  thread id, or TID_ERROR if the thread cannot be created. */
 tid_t process_execute(const char *file_name)
 {
-	char *fn_copy, *fn_copy2;
+	char *fn_copy, *fn_copy_copy;
 	tid_t tid;
 
 	char *save_ptr;
@@ -44,28 +44,36 @@ tid_t process_execute(const char *file_name)
 	strlcpy(fn_copy, file_name, PGSIZE);
 
 	//to extract the name of the file from argument to process_execute
-	fn_copy2 = (char *)malloc(strlen(file_name) + 1);
-	if (fn_copy2 == NULL)
+	//+1 to accommodate the null character \0
+	fn_copy_copy = (char *) malloc(strlen(file_name) + 1);
+	if (fn_copy_copy == NULL)
 	{
 		palloc_free_page(fn_copy);
 		return TID_ERROR;
 	}
-	strlcpy(fn_copy2, file_name, PGSIZE);
+	strlcpy(fn_copy_copy, file_name, PGSIZE);
 
 	/* Create a new thread to execute FILE_NAME. */
-	tid = thread_create(strtok_r(fn_copy2, " ", &save_ptr), PRI_DEFAULT,
+	//First word in is the name of the file to execute. The following creates a
+	//new thread with that name.
+	tid = thread_create(strtok_r(fn_copy_copy, " ", &save_ptr), PRI_DEFAULT,
 			start_process, fn_copy);
 
-	free(fn_copy2);
+	//free the memory allocated previously for the copy of fn_copy (fn_copy_copy).
+	free(fn_copy_copy);
 
 	if (tid == TID_ERROR)
 	{
 		palloc_free_page(fn_copy);
 		return tid;
 	}
+
 	t = tid_to_thread(tid);
-	sema_down(&t->sema_wait);
-	if (t->ret_status == RET_STATUS_ERROR)
+
+	//wait for the process to load
+	sema_down(&t->sema_process_load);
+
+	if (t->return_status == RET_STATUS_ERROR)
 		tid = TID_ERROR;
 
 	return tid;
@@ -92,75 +100,80 @@ static void start_process(void *file_name_)
 	success = load(argument, &if_.eip, &if_.esp);
 
 	current_thread = thread_current();
-	if (success)
+
+	//Verify whether load was a success
+	if (!success)
 	{
-		//push arguments to stack
-		int no_of_arguments = 0;
-		int argc = 0, length;
-		void* sp;
+		//In case of process load being unsuccessful
 
-		sp = if_.esp;
+		palloc_free_page(file_name);	//deallocate page
 
-		while (argument != NULL)
-		{
-			length = strlen(argument) + 1;
-			if (PHYS_BASE - (sp - length) > MAX_ARGS)
-				break;
-			sp = sp - length;
-			strlcpy(sp, argument, length);
-			argc++;
-			argument = strtok_r(NULL, " ", &saveptr);
-		}
-
-		//save pointer to last argument
-		last_arg_ptr = (char*) sp;
-
-		//word align
-		sp = (void *) ((int32_t) sp & 0xfffffffc);
-
-		//push null
-		sp = (((char**) sp) - 1);
-		*((char*) (sp)) = 0;
-
-		//pointers to arguments
-		while (no_of_arguments < argc)
-		{
-			while (*(last_arg_ptr - 1) != '\0')
-				last_arg_ptr++;
-			sp = (((char**) sp) - 1);
-			*((char**) sp) = last_arg_ptr;
-			no_of_arguments++;
-			last_arg_ptr++;
-		}
-
-		//push argv
-		char** first_arg_ptr = (char**) sp;
-		sp = (((char**) sp) - 1);
-		*((char***) sp) = first_arg_ptr;
-
-		//push argc
-		int* stack_int_ptr = (int*) sp;
-		*(--stack_int_ptr) = argc;
-		sp = (void*) stack_int_ptr;
-
-		//push null
-		sp = (((void**) sp) - 1);
-		*((void**) (sp)) = 0;
-
-		if_.esp = sp;
-
-		current_thread->exec = filesys_open(file_name);
-		file_deny_write(current_thread->exec);
-		sema_up(&current_thread->sema_wait);
-	}
-	else
-	{
-		palloc_free_page(file_name);
-
-		current_thread->ret_status = RET_STATUS_ERROR;	//Error
-		sema_up(&current_thread->sema_wait);
+		current_thread->return_status = RET_STATUS_ERROR;	//Error
+		sema_up(&current_thread->sema_process_load);//unblock process_execute
 		thread_exit();
 	}
+
+	//The following code pushes arguments to stack
+	//--------------------------------------------
+	int no_of_arguments = 0, argc = 0, length;
+	void* sp;
+
+	sp = if_.esp;
+
+	while (argument != NULL)
+	{
+		length = strlen(argument) + 1;
+		if (PHYS_BASE - (sp - length) > MAX_ARGS)
+			break;
+		sp = sp - length;
+		strlcpy(sp, argument, length);
+		argc++;
+		argument = strtok_r(NULL, " ", &saveptr);
+	}
+
+	//save pointer to last argument
+	last_arg_ptr = (char*) sp;
+
+	//word align
+	sp = (void *) ((int32_t) sp & 0xfffffffc);
+
+	//push null
+	sp = (((char**) sp) - 1);
+	*((char*) (sp)) = 0;
+
+	//pointers to arguments
+	while (no_of_arguments < argc)
+	{
+		while (*(last_arg_ptr - 1) != '\0')
+			last_arg_ptr++;
+		sp = (((char**) sp) - 1);
+		*((char**) sp) = last_arg_ptr;
+		no_of_arguments++;
+		last_arg_ptr++;
+	}
+
+	//push argv
+	char** first_arg_ptr = (char**) sp;
+	sp = (((char**) sp) - 1);
+	*((char***) sp) = first_arg_ptr;
+
+	//push argc
+	int* stack_int_ptr = (int*) sp;
+	*(--stack_int_ptr) = argc;
+	sp = (void*) stack_int_ptr;
+
+	//push null
+	sp = (((void**) sp) - 1);
+	*((void**) (sp)) = 0;
+
+	if_.esp = sp;
+
+	current_thread->exec = filesys_open(file_name);
+
+	//MINE MINE MINE!!!
+	file_deny_write(current_thread->exec);
+
+	sema_up(&current_thread->sema_process_load); //unblock process execute
 
 	/* If load failed, quit. */
 	palloc_free_page(file_name);
@@ -194,16 +207,27 @@ int process_wait(tid_t child_tid)
 	current_thread = thread_current();
 	t = tid_to_thread(child_tid);
 
-	if (t == NULL || t->parent != current_thread || t->waited)
+	/* all erroneous conditions
+	 * -- t == NULL ----> process is trying to wait on a child which is not there
+	 * -- t->parent != current_thread ----> Do not wait for someone else's child!!
+	 * 									    No adoption allowed! :P
+	 * -- t->process_waited ----> It's enough if you wait for me once.
+	 */
+	if (t == NULL || t->parent != current_thread || t->process_waited)
 		return RET_STATUS_ERROR;	//return error
-	t->waited = true;
-	if (t->ret_status != RET_STATUS_OK || t->exited == true)
-		return t->ret_status;
 
-	sema_down(&t->sema_wait);
-	int ret = t->ret_status;
-	sema_up(&t->sema_exit);
-	t->waited = true;
+	/*this is required to prevent a parent from waiting for the child multiple
+	 *times
+	 */
+	t->process_waited = true;
+
+	if (t->return_status != RET_STATUS_OK || t->process_exited == true)
+		return t->return_status;
+
+	sema_down(&t->sema_process_wait);
+	int ret = t->return_status;
+	sema_up(&t->sema_process_exit);
+	t->process_waited = true;
 
 	return ret;
 }
@@ -215,14 +239,15 @@ void process_exit(void)
 	uint32_t *pd;
 
 	if (cur->exec != NULL)
+		//I am bored of cur->exec. You may have it now
 		file_allow_write(cur->exec);
 
-	while (!list_empty(&cur->sema_wait.waiters))
-		sema_up(&cur->sema_wait);
+	while (!list_empty(&cur->sema_process_wait.waiters))
+		sema_up(&cur->sema_process_wait);
 
-	cur->exited = true;
+	cur->process_exited = true;
 	if (cur->parent != NULL)
-		sema_down(&cur->sema_exit);
+		sema_down(&cur->sema_process_exit);
 
 	/* Destroy the current process's page directory and switch back
 	 to the kernel-only page directory. */
@@ -554,7 +579,8 @@ static bool setup_stack(void **esp)
 	kpage = palloc_get_page(PAL_USER | PAL_ZERO);
 	if (kpage != NULL)
 	{
-		success = install_page(((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
+		success = install_page(((uint8_t *) PHYS_BASE) - PGSIZE, kpage,
+		true);
 		if (success)
 			*esp = PHYS_BASE;
 		else

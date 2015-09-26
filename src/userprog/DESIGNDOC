@@ -48,7 +48,7 @@ Arpith K <arpith@live.com> or <arpith.k@csa.iisc.ernet.in>
 	After word aligning the stack pointer, I am pushing the addresses of the
 	arguments in reverse order. To achieve this, I have another pointer witch
 	crawls up the stack looking for null terminated arguments. The address
-	this obtained is storeed in the location pointed by sp after decrementing
+	this obtained is stored in the location pointed by sp after decrementing
 	it appropriately.
 
 	The size stack page in PintOS is 4096 bytes. A check is made while adding
@@ -113,11 +113,16 @@ Arpith K <arpith@live.com> or <arpith.k@csa.iisc.ernet.in>
  		struct thread
  		-------------
 
- 			bool exited; A flag to keep a tab to whether the process has
+ 			bool process_exited; A flag to keep a tab to whether the process has
  				exited.
 			
-			bool waited; This is a boolean variable to check if a process has
+			bool process_waited; This is a boolean variable to check if a process has
 				already waited for the child.
+
+			struct semaphore sema_process_load;
+			struct semaphore sema_process_wait;
+			struct semaphore sema_process_exit;
+				The above are three semaphores to synchronize the load, wait and store operations.
 
 			struct thread *parent;// Parent process of the thread in question
 				This is the pointer to the parent of the thread in question
@@ -176,7 +181,7 @@ Arpith K <arpith@live.com> or <arpith.k@csa.iisc.ernet.in>
 
 	The first step is to verify the validity of all parameters. Apart from checking
 	that the input argument is sound, I also check that the parent of the child
-	that the process is waiting for is infact itself. This ensures that a process
+	that the process is waiting for is in fact itself. This ensures that a process
 	does not wait for a child of some other process.
 
 	I have a semaphore which is initialized to zero. Hence, any attempt by the
