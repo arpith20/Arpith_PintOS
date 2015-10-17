@@ -18,7 +18,6 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
-#include <ctype.h>
 #include "threads/malloc.h"
 
 static thread_func start_process NO_RETURN;
@@ -607,15 +606,3 @@ static bool install_page(void *upage, void *kpage, bool writable)
 	return (pagedir_get_page(t->pagedir, upage) == NULL
 			&& pagedir_set_page(t->pagedir, upage, kpage, writable));
 }
-
-/********************************************************/
-void strip_extra_spaces(const char* str_orig)
-{
-	char *str = (char *) str_orig;
-	int i, x;
-	for (i = x = 1; str[i]; ++i)
-		if (!isspace(str[i]) || (i > 0 && !isspace(str[i - 1])))
-			str[x++] = str[i];
-	str[x] = '\0';
-}
-/********************************************************/

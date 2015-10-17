@@ -8,8 +8,6 @@ int process_wait (tid_t);
 void process_exit (void);
 void process_activate (void);
 
-void strip_extra_spaces(const char* str);
-
 #define RET_STATUS_ERROR -1
 #define RET_STATUS_OK 0
 #define MAX_ARGS 4096	//max args size is 4KB, the size of page

@@ -22,6 +22,7 @@
 #include "threads/palloc.h"
 #include "threads/pte.h"
 #include "threads/thread.h"
+#include <ctype.h>
 
 #ifdef USERPROG
 #include "userprog/process.h"
@@ -38,6 +39,8 @@
 #include "filesys/filesys.h"
 #include "filesys/fsutil.h"
 #endif
+
+void strip_extra_spaces(const char* str);
 
 /* Page directory with kernel mappings only. */
 uint32_t *init_page_dir;
@@ -293,6 +296,18 @@ static void run_task(char **argv)
 #endif
 	printf("Execution of '%s' complete.\n", task);
 }
+
+/********************************************************/
+void strip_extra_spaces(const char* str_orig)
+{
+	char *str = (char *) str_orig;
+	int i, x;
+	for (i = x = 1; str[i]; ++i)
+		if (!isspace(str[i]) || (i > 0 && !isspace(str[i - 1])))
+			str[x++] = str[i];
+	str[x] = '\0';
+}
+/********************************************************/
 
 /* Executes all of the actions specified in ARGV[]
  up to the null pointer sentinel. */
