@@ -198,9 +198,11 @@ Arpith K <arpith@live.com> or <arpith.k@csa.iisc.ernet.in>
 >> the page during the eviction process?  How do you avoid a race
 >> between P evicting Q's frame and Q faulting the page back in?
 
-
-
-
+	I have kept a lock which ensures P to complete it's eviction before Q can
+	operate on the frame. After this Q may fault and bring it back it which is
+	completely valid. Also, Q's frame is observed right at the end during the
+	eviction process ensuring it's re-eviction unlikely.
+	
 >> B7: Suppose a page fault in process P causes a page to be read from
 >> the file system or swap.  How do you ensure that a second process Q
 >> cannot interfere by e.g. attempting to evict the frame while it is
