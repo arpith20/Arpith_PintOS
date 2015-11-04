@@ -20,6 +20,11 @@
 
 #include "threads/malloc.h"
 
+#include "vm/struct.h"
+#include "filesys/inode.h"
+#include "vm/page.h"
+#include "vm/frame.h"
+
 static thread_func start_process NO_RETURN;
 static bool load(const char *cmdline, void (**eip)(void), void **esp);
 
@@ -82,6 +87,7 @@ tid_t process_execute(const char *file_name)
  running. */
 static void start_process(void *file_name_)
 {
+	//printf("Process started\n");
 	char *file_name = file_name_;
 	struct intr_frame if_;
 	bool success;
@@ -172,6 +178,8 @@ static void start_process(void *file_name_)
 	//MINE MINE MINE!!!
 	file_deny_write(current_thread->exec);
 
+	//printf("Process stack setup\n");
+
 	sema_up(&current_thread->sema_process_load); //unblock process execute
 
 	/* If load failed, quit. */
@@ -218,8 +226,9 @@ int process_wait(tid_t child_tid)
 	/*this is required to prevent a parent from waiting for the child multiple
 	 *times
 	 */
+#ifndef VM
 	t->process_waited = true;
-
+#endif
 	if (t->return_status != RET_STATUS_OK || t->process_exited == true)
 		return t->return_status;
 
@@ -527,10 +536,12 @@ static bool validate_segment(const struct Elf32_Phdr *phdr, struct file *file)
 static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		uint32_t read_bytes, uint32_t zero_bytes, bool writable)
 {
+
 	ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
 	ASSERT(pg_ofs(upage) == 0);
 	ASSERT(ofs % PGSIZE == 0);
-
+#ifndef VM
+	//original code
 	file_seek(file, ofs);
 	while (read_bytes > 0 || zero_bytes > 0)
 	{
@@ -541,22 +552,22 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
 		/* Get a page of memory. */
-		uint8_t *kpage = palloc_get_page(PAL_USER);
-		if (kpage == NULL)
-			return false;
+		uint8_t *physical_address = palloc_get_page(PAL_USER);
+		if (physical_address == NULL)
+		return false;
 
 		/* Load this page. */
-		if (file_read(file, kpage, page_read_bytes) != (int) page_read_bytes)
+		if (file_read(file, physical_address, page_read_bytes) != (int) page_read_bytes)
 		{
-			palloc_free_page(kpage);
+			palloc_free_page(physical_address);
 			return false;
 		}
-		memset(kpage + page_read_bytes, 0, page_zero_bytes);
+		memset(physical_address + page_read_bytes, 0, page_zero_bytes);
 
 		/* Add the page to the process's address space. */
-		if (!install_page(upage, kpage, writable))
+		if (!install_page(upage, physical_address, writable))
 		{
-			palloc_free_page(kpage);
+			palloc_free_page(physical_address);
 			return false;
 		}
 
@@ -566,25 +577,75 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		upage += PGSIZE;
 	}
 	return true;
+#else
+	struct page_struct *p = NULL;
+	off_t load_offset = ofs;
+	off_t bid = -1;	//block ID
+	struct inode *inode = NULL;
+	while (read_bytes > 0 || zero_bytes > 0)
+	{
+		/* Calculate how to fill this page.
+		 We will read PAGE_READ_BYTES bytes from FILE
+		 and zero the final PAGE_ZERO_BYTES bytes. */
+		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+		size_t page_zero_bytes = PGSIZE - page_read_bytes;
+
+		bid = -1;
+		if (!writable)
+		{
+			inode = file_get_inode(file);
+			if (inode != NULL)
+				bid = byte_to_sector(inode, load_offset);
+		}
+		p = NULL;
+		p = VM_new_page(TYPE_FILE, upage, writable, file, load_offset,
+				page_read_bytes, page_zero_bytes, bid);
+		if (p != NULL)
+		{
+			read_bytes -= page_read_bytes;
+			zero_bytes -= page_zero_bytes;
+			upage += PGSIZE;
+			load_offset = load_offset + PGSIZE;
+		}
+		else
+			return false;
+	}
+	file_seek(file, ofs);
+	return true;
+#endif
 }
 
 /* Create a minimal stack by mapping a zeroed page at the top of
  user virtual memory. */
 static bool setup_stack(void **esp)
 {
-	uint8_t *kpage;
 	bool success = false;
 
-	kpage = palloc_get_page(PAL_USER | PAL_ZERO);
-	if (kpage != NULL)
+#ifndef VM
+	uint8_t *physical_address;
+
+	physical_address = palloc_get_page(PAL_USER | PAL_ZERO);
+	if (physical_address != NULL)
 	{
-		success = install_page(((uint8_t *) PHYS_BASE) - PGSIZE, kpage,
-		true);
+		success = install_page(((uint8_t *) PHYS_BASE) - PGSIZE, physical_address,
+				true);
 		if (success)
-			*esp = PHYS_BASE;
+		*esp = PHYS_BASE;
 		else
-			palloc_free_page(kpage);
+		palloc_free_page(physical_address);
 	}
+#else
+	struct page_struct *p;
+	p = NULL;
+	p = VM_new_page(TYPE_ZERO, ((uint8_t *) PHYS_BASE) - PGSIZE, true, NULL,
+	NULL, NULL, NULL, NULL);
+	if (p != NULL)
+	{
+		*esp = PHYS_BASE;
+		VM_operation_page(OP_LOAD, p, p->physical_address, false);
+		success = true;
+	}
+#endif
 	return success;
 }
 

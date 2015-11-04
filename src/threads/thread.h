@@ -3,8 +3,10 @@
 
 #include <debug.h>
 #include <list.h>
+#include <hash.h>
 #include <stdint.h>
 #include "threads/synch.h"
+#include "filesys/file.h"
 
 #include "filesys/filesys.h"
 
@@ -102,8 +104,7 @@ struct thread
 
 	/****************************************************************************/
 	//The following members are required for implementing project 2
-
-	bool process_exited; // True - process has exited
+	bool process_exited;// True - process has exited
 	bool process_waited;
 
 	struct semaphore sema_process_load;// Semaphore -- for synchronization of load operation.
@@ -114,11 +115,16 @@ struct thread
 
 	struct file *exec;// Points to the file containing thread executable
 
-	struct list files; //Files opened by the current thread
+	struct list files;//Files opened by the current thread
 
 	int return_status;// Return status of the thread after appropriate operation.
-
 	/*****************************************************************************/
+#endif
+#ifdef VM
+	//for 3rd project
+	struct list mmap_files;
+	struct list children;
+	struct list_elem child_elem;
 #endif
 
 	/* Owned by thread.c. */

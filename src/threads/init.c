@@ -40,6 +40,10 @@
 #include "filesys/fsutil.h"
 #endif
 
+#ifdef VM
+#include "vm/struct.h"
+#endif
+
 void strip_extra_spaces(const char* str);
 
 /* Page directory with kernel mappings only. */
@@ -104,8 +108,8 @@ int main(void)
 
 	/* Segmentation. */
 #ifdef USERPROG
-	tss_init ();
-	gdt_init ();
+	tss_init();
+	gdt_init();
 #endif
 
 	/* Initialize interrupt handlers. */
@@ -114,8 +118,8 @@ int main(void)
 	kbd_init();
 	input_init();
 #ifdef USERPROG
-	exception_init ();
-	syscall_init ();
+	exception_init();
+	syscall_init();
 #endif
 
 	/* Start thread scheduler and enable interrupts. */
@@ -128,6 +132,10 @@ int main(void)
 	ide_init ();
 	locate_block_devices ();
 	filesys_init (format_filesys);
+#endif
+
+#ifdef VM
+	VM_init();
 #endif
 
 	printf("Boot complete.\n");
@@ -258,8 +266,8 @@ parse_options(char **argv)
 		else if (!strcmp(name, "-mlfqs"))
 			thread_mlfqs = true;
 #ifdef USERPROG
-		else if (!strcmp (name, "-ul"))
-		user_page_limit = atoi (value);
+		else if (!strcmp(name, "-ul"))
+			user_page_limit = atoi(value);
 #endif
 		else
 			PANIC("unknown option `%s' (use -h for help)", name);
@@ -290,7 +298,7 @@ static void run_task(char **argv)
 
 	printf("Executing '%s':\n", task);
 #ifdef USERPROG
-	process_wait (process_execute (task));
+	process_wait(process_execute(task));
 #else
 	run_test(task);
 #endif
@@ -398,48 +406,48 @@ static void usage(void)
 #ifdef USERPROG
 			"  -ul=COUNT          Limit user memory to COUNT pages.\n"
 #endif
-)			;
-			shutdown_power_off ();
-		}
+			);
+	shutdown_power_off();
+}
 
 #ifdef FILESYS
-			/* Figure out what block devices to cast in the various Pintos roles. */
-			static void
-			locate_block_devices (void)
-			{
-				locate_block_device (BLOCK_FILESYS, filesys_bdev_name);
-				locate_block_device (BLOCK_SCRATCH, scratch_bdev_name);
+/* Figure out what block devices to cast in the various Pintos roles. */
+static void
+locate_block_devices (void)
+{
+	locate_block_device (BLOCK_FILESYS, filesys_bdev_name);
+	locate_block_device (BLOCK_SCRATCH, scratch_bdev_name);
 #ifdef VM
-			locate_block_device (BLOCK_SWAP, swap_bdev_name);
+	locate_block_device (BLOCK_SWAP, swap_bdev_name);
 #endif
-		}
+}
 
-		/* Figures out what block device to use for the given ROLE: the
-		 block device with the given NAME, if NAME is non-null,
-		 otherwise the first block device in probe order of type
-		 ROLE. */
-		static void
-		locate_block_device (enum block_type role, const char *name)
-		{
-			struct block *block = NULL;
+/* Figures out what block device to use for the given ROLE: the
+ block device with the given NAME, if NAME is non-null,
+ otherwise the first block device in probe order of type
+ ROLE. */
+static void
+locate_block_device (enum block_type role, const char *name)
+{
+	struct block *block = NULL;
 
-			if (name != NULL)
-			{
-				block = block_get_by_name (name);
-				if (block == NULL)
-				PANIC ("No such block device \"%s\"", name);
-			}
-			else
-			{
-				for (block = block_first (); block != NULL; block = block_next (block))
-				if (block_type (block) == role)
-				break;
-			}
+	if (name != NULL)
+	{
+		block = block_get_by_name (name);
+		if (block == NULL)
+		PANIC ("No such block device \"%s\"", name);
+	}
+	else
+	{
+		for (block = block_first (); block != NULL; block = block_next (block))
+		if (block_type (block) == role)
+		break;
+	}
 
-			if (block != NULL)
-			{
-				printf ("%s: using %s\n", block_type_name (role), block_name (block));
-				block_set_role (role, block);
-			}
-		}
+	if (block != NULL)
+	{
+		printf ("%s: using %s\n", block_type_name (role), block_name (block));
+		block_set_role (role, block);
+	}
+}
 #endif

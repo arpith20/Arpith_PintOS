@@ -192,6 +192,7 @@ void thread_print_stats(void)
 tid_t thread_create(const char *name, int priority, thread_func *function,
 		void *aux)
 {
+	struct thread *cur = thread_current();
 	struct thread *t;
 	struct kernel_thread_frame *kf;
 	struct switch_entry_frame *ef;
@@ -258,6 +259,12 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
 	t->process_exited = false;
 	t->process_waited = false;
 	t->parent = thread_current();
+#ifdef VM
+	list_init(&t->mmap_files);
+	list_init(&t->children);
+	if (cur != initial_thread)
+		list_push_front(&cur->children, &t->child_elem);
+#endif
 
 #endif
 
@@ -338,8 +345,38 @@ void thread_exit(void)
 {
 	ASSERT(!intr_context());
 
-#ifdef USERPROG
+#ifdef VM
+	struct list_elem *e;
+	struct thread *cur = NULL;
+	struct list cur_c;
+
+	cur = thread_current();
+	cur_c = cur->children;
+
+	if (cur != NULL)
+	{
+		for (e = list_begin(&thread_current()->children);
+				e != list_end(&thread_current()->children); e = list_next(e))
+		{
+			if (list_entry(e, struct thread, child_elem)->process_exited)
+				sema_up(
+						&(list_entry(e, struct thread, child_elem))->sema_process_exit);
+			else
+			{
+				list_entry(e, struct thread, child_elem)->parent = NULL;
+				list_remove(
+						&(list_entry(e, struct thread, child_elem))->child_elem);
+			}
+
+		}
+	}
+
 	process_exit();
+
+	if (cur != NULL && cur->parent != NULL)
+		if (cur->parent != initial_thread)
+			list_remove(&cur->child_elem);
+
 #endif
 
 	/* Remove thread from all threads list, set our status to dying,

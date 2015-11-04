@@ -7,6 +7,9 @@
 #include "userprog/syscall.h"
 #include "threads/vaddr.h"
 
+#include "vm/struct.h"
+#include "threads/pte.h"
+
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
@@ -124,6 +127,7 @@ static void page_fault(struct intr_frame *f)
 	bool write; /* True: access was write, false: access was read. */
 	bool user; /* True: access by user, false: access by kernel. */
 	void *fault_addr; /* Fault address. */
+	void *fault_page; //Fault pg
 
 	/* Obtain faulting address, the virtual address that was
 	 accessed to cause the fault.  It may point to code or to
@@ -146,8 +150,49 @@ static void page_fault(struct intr_frame *f)
 	write = (f->error_code & PF_W) != 0;
 	user = (f->error_code & PF_U) != 0;
 
+#ifndef VM
 	if ((is_kernel_vaddr(fault_addr) && user) || not_present)
+	system_call_exit(-1);
+#else
+
+	//No access to kernel region is user mode
+	if ((is_kernel_vaddr(fault_addr) && user))
 		system_call_exit(-1);
+
+	//obtain fault page
+	fault_page = PTE_ADDR & (uint32_t) fault_addr;
+
+	struct page_struct *page;
+	page = VM_find_page(fault_page);
+
+	if (page != NULL)
+	{
+		if (write && !page->writable)
+			system_call_exit(-1);
+		bool success = VM_operation_page(OP_LOAD, page, page->physical_address, false);
+		if (success)
+			return;
+		else
+			system_call_exit(-1);
+	}
+	bool stack_status = ((uint32_t) fault_addr > 0)
+			&& (fault_addr >= (f->esp - 32))
+			&& ((PHYS_BASE - pg_round_down(fault_addr)) <= (1 << 23));
+	if (stack_status)
+	{
+		struct page_struct *temp = VM_stack_grow(fault_page, false);
+		if (temp != NULL)
+			return;
+		else
+			system_call_exit(-1);
+
+	}
+	if (not_present)
+		system_call_exit(-1);
+
+	f->eax = 0xffffffff;
+	f->eip = (void *) f->eax;
+#endif
 
 	/* To implement virtual memory, delete the rest of the function
 	 body, and replace it with code that brings in the page to

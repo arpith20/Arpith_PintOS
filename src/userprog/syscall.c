@@ -42,31 +42,32 @@ static void syscall_handler(struct intr_frame *f)
 			break;
 		case SYS_EXEC:
 			if (is_user_vaddr(argument + 1))
-				ret_val = system_call_exec((const char *)*(argument + 1));
+				ret_val = system_call_exec((const char *) *(argument + 1));
 			else
 				system_call_exit(-1);
 			break;
 		case SYS_WAIT:
 			if (is_user_vaddr(argument + 1))
-				ret_val = system_call_wait((pid_t)*(argument + 1));
+				ret_val = system_call_wait((pid_t) *(argument + 1));
 			else
 				system_call_exit(-1);
 			break;
 		case SYS_CREATE:
 			if (is_user_vaddr(argument + 1) && is_user_vaddr(argument + 2))
-				ret_val = system_call_create((const char *)*(argument + 1), (unsigned)*(argument + 2));
+				ret_val = system_call_create((const char *) *(argument + 1),
+						(unsigned) *(argument + 2));
 			else
 				system_call_exit(-1);
 			break;
 		case SYS_REMOVE:
 			if (is_user_vaddr(argument + 1))
-				ret_val = system_call_remove((const char *)*(argument + 1));
+				ret_val = system_call_remove((const char *) *(argument + 1));
 			else
 				system_call_exit(-1);
 			break;
 		case SYS_OPEN:
 			if (is_user_vaddr(argument + 1))
-				ret_val = system_call_open((const char *)*(argument + 1));
+				ret_val = system_call_open((const char *) *(argument + 1));
 			else
 				system_call_exit(-1);
 			break;
@@ -79,8 +80,8 @@ static void syscall_handler(struct intr_frame *f)
 		case SYS_READ:
 			if (is_user_vaddr(argument + 1) && is_user_vaddr(argument + 2)
 					&& is_user_vaddr(argument + 3))
-				ret_val = system_call_read(*(argument + 1), (void *)*(argument + 2),
-						(unsigned)*(argument + 3));
+				ret_val = system_call_read(*(argument + 1),
+						(void *) *(argument + 2), (unsigned) *(argument + 3));
 			else
 				system_call_exit(-1);
 			break;
@@ -88,8 +89,9 @@ static void syscall_handler(struct intr_frame *f)
 			//printf("System call to write");
 			if (is_user_vaddr(argument + 1) && is_user_vaddr(argument + 2)
 					&& is_user_vaddr(argument + 3))
-				ret_val = system_call_write(*(argument + 1), (const void *)*(argument + 2),
-						(unsigned)*(argument + 3));
+				ret_val = system_call_write(*(argument + 1),
+						(const void *) *(argument + 2),
+						(unsigned) *(argument + 3));
 			else
 				system_call_exit(-1);
 			break;
@@ -111,6 +113,18 @@ static void syscall_handler(struct intr_frame *f)
 			else
 				system_call_exit(-1);
 			break;
+		case SYS_MMAP:
+			if (is_user_vaddr(argument + 1) && is_user_vaddr(argument + 2))
+				ret_val = system_call_mmap(*(argument + 1), *(argument + 2));
+			else
+				system_call_exit(-1);
+			break;
+		case SYS_MUNMAP:
+			if (is_user_vaddr(argument + 1))
+				system_call_munmap(*(argument + 1));
+			else
+				system_call_exit(-1);
+			break;
 		default:
 			system_call_exit(-1);
 		}
@@ -118,5 +132,6 @@ static void syscall_handler(struct intr_frame *f)
 	else
 		system_call_exit(-1);
 
+	param_esp = f->esp;
 	f->eax = ret_val;
 }
