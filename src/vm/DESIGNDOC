@@ -1,0 +1,309 @@
+       	    +---------------------------+
+		    |			E0 253			|
+		    | PROJECT 3: VIRTUAL MEMORY	|
+		    |	   DESIGN DOCUMENT		|
+		    +---------------------------+
+
+---- GROUP ----
+
+>> Fill in the names and email addresses of your group members.
+
+Arpith K <arpith@live.com> or <arpith.k@csa.iisc.ernet.in>
+
+---- PRELIMINARIES ----
+
+>> If you have any preliminary comments on your submission, notes for the
+>> TAs, or extra credit, please give them here.
+
+	This file is incomplete and under construction. If you are reading this,
+	then it means that you have pulled the repository before I finished the
+	DESIGNDOC (or I just forgot to remove this message!)
+
+>> Please cite any offline or online sources you consulted while
+>> preparing your submission, other than the Pintos documentation, course
+>> text, lecture notes, and course staff.
+
+			PAGE TABLE MANAGEMENT
+			=====================
+
+---- DATA STRUCTURES ----
+
+>> A1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+	vm/struct.h
+	The following are the data structures that have been used for PAGE TABLE
+	MANAGEMENT
+	struct page_struct
+	-------------------
+		This data structure represents an entry in the supplemental page table.
+		The data members of page_struct are as follows: 
+			-> int type; An integer variable to identify the type of the page
+			
+			-> void *virtual_address; The virtual address of the page is stored here
+			
+			-> void *physical_address; The physical address is stored here
+			
+			-> bool writable; This boolean variable determines if page is
+					writable or not. A true value indicates that it has write
+					permissions
+			
+			-> uint32_t *pagedir;  pagedir of page
+			
+			-> struct list_elem frame_elem; list element for shared frame
+			
+			-> size_t index; This stores the index of swap block
+
+			-> size_t read_bytes; read bytes
+			
+			-> size_t zero_bytes; zero bytes
+			
+			-> bool loaded; This determines if a page is loaded or not
+			
+			-> struct file *file; the file struct of the page
+			
+			-> off_t offset; //offset in the file
+			
+			-> off_t bid; //inode block index
+			
+
+	The following are the constants that have been defined under struct.h to
+	identify the type of the file
+		#define TYPE_ZERO 0
+		#define TYPE_FILE 1
+		#define TYPE_SWAP 2
+
+---- ALGORITHMS ----
+
+>> A2: In a few paragraphs, describe your code for locating the frame,
+>> if any, that contains the data of a given page.
+	
+	When a frame needs to be accessed, it calls VM_get_page. There are two
+	possibilities.
+
+	If the frame has already been allocated previously, given the virtual
+	address of the frame it obtains an entry in the thread's supplemental page
+	table. Now, it's just a matter of comparing the page directories to obtain
+	a page. Once done, I obtain the physical addresses of the frame and lookup
+	the actual frame in the global frames hash table.
+
+	If the frame has not been loaded, then I would evict old frames and
+	allocate a new one.
+
+>> A3: How does your code coordinate accessed and dirty bits between
+>> kernel and user virtual addresses that alias a single frame, or
+>> alternatively how do you avoid the issue?
+
+	I only set the page as accessed or dirty using virtual addresses. I never
+	use the physical address for accesses after it has been swapped in. This
+	gets over all aliasing issues successfully.
+
+---- SYNCHRONIZATION ----
+
+>> A4: When two user processes both need a new frame at the same time,
+>> how are races avoided?
+
+	Before any process can access a frame, I lock the shared resource ensuring
+	that only one process can access a frame at a time. The other process is
+	made to wait on a lock semaphore.
+
+---- RATIONALE ----
+
+>> A5: Why did you choose the data structure(s) that you did for
+>> representing virtual-to-physical mappings?
+
+	When conducting VM routines, speed of access is of utmost importance. So,
+	data structures such as hash maps (for frames) and bit maps(for swap
+	slots) have been used instead of linked list or arrays.
+
+		       PAGING TO AND FROM DISK
+		       =======================
+
+---- DATA STRUCTURES ----
+
+>> B1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+	vm/struct.h
+	The following is the data structure that is used to represent a frame
+	struct frame_struct
+		-> void *physical_address; 
+				Physical address of the frame
+
+		-> bool persistent;		
+				Determines if the frame is pinned or not
+		
+		-> struct list shared_pages; 
+				List of all pages that share this frame
+		
+		-> struct list_elem frame_list_elem; 
+				List element for the frames list
+		
+		-> struct lock page_list_lock; 
+				Page access is synchronized using this lock
+		
+		-> struct hash_elem hash_elem; 
+				This is required for hash frame table
+
+	struct block *swap_block;
+		This is used to identify a swap block
+
+	struct bitmap *swap_bitmap;
+		This is used to manage swap slots.
+
+	size_t swap_size;
+		The size of the swap is stored here.
+
+
+---- ALGORITHMS ----
+
+>> B2: When a frame is required but none is free, some frame must be
+>> evicted.  Describe your code for choosing a frame to evict.
+
+	I have used a variant of clock algorithm to implement frame eviction.
+
+	evict() function in frame.c iterates through all the frames which inturn
+	iterates through all the pages which are sharing the same frame. The
+	access bit of each page is observed. If all are zero, the page is
+	victimized and this is evicted.
+
+>> B3: When a process P obtains a frame that was previously used by a
+>> process Q, how do you adjust the page table (and any other data
+>> structures) to reflect the frame Q no longer has?
+	
+	I am clearing the mappings in pagedir so that the page no longer can be
+	accessed. I unload the contents to disk and remove the entry from hash
+	table. Only then can P obtain the frame under question.
+
+>> B4: Explain your heuristic for deciding whether a page fault for an
+>> invalid virtual address should cause the stack to be extended into
+>> the page that faulted.
+
+	I check if the fault address is less than 32 bytes below the stack
+	pointer. This works because PUSHA can push atmost 32 bytes at once.
+
+---- SYNCHRONIZATION ----
+
+>> B5: Explain the basics of your VM synchronization design.  In
+>> particular, explain how it prevents deadlock.  (Refer to the
+>> textbook for an explanation of the necessary conditions for
+>> deadlock.)
+
+	The various operations that needs to be done includes page loading,
+	unloading, eviction etc. I have an array of locks defined in vm/struct.h
+	which I use to synchronize all accesses. Such locks are used internally
+	and whence will not cause deadlocks.
+
+>> B6: A page fault in process P can cause another process Q's frame
+>> to be evicted.  How do you ensure that Q cannot access or modify
+>> the page during the eviction process?  How do you avoid a race
+>> between P evicting Q's frame and Q faulting the page back in?
+
+
+>> B7: Suppose a page fault in process P causes a page to be read from
+>> the file system or swap.  How do you ensure that a second process Q
+>> cannot interfere by e.g. attempting to evict the frame while it is
+>> still being read in?
+
+>> B8: Explain how you handle access to paged-out pages that occur
+>> during system calls.  Do you use page faults to bring in pages (as
+>> in user programs), or do you have a mechanism for "locking" frames
+>> into physical memory, or do you use some other design?  How do you
+>> gracefully handle attempted accesses to invalid virtual addresses?
+
+---- RATIONALE ----
+
+>> B9: A single lock for the whole VM system would make
+>> synchronization easy, but limit parallelism.  On the other hand,
+>> using many locks complicates synchronization and raises the
+>> possibility for deadlock but allows for high parallelism.  Explain
+>> where your design falls along this continuum and why you chose to
+>> design it this way.
+
+			 MEMORY MAPPED FILES
+			 ===================
+
+---- DATA STRUCTURES ----
+
+>> C1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+	vm/struct.h
+	struct mmap_struct
+		-> mapid_t mapid; 
+				A unique ID to identify a map
+		
+		-> int fid; 
+				A file descriptor
+		
+		-> struct hash_elem frame_hash_elem; 
+				hash element for frame tables
+		
+		-> struct list_elem thread_mmap_list; 
+				for thread's mmap list
+		
+		-> void *start_address;
+		   void *end_address;
+				a mapped file may span for multiple pages. This stores the
+				start and end virtual addresses
+
+	vm/thread.h
+		struct list mmap_files
+			This keeps a list of all memory mapped files
+
+
+---- ALGORITHMS ----
+
+>> C2: Describe how memory mapped files integrate into your virtual
+>> memory subsystem.  Explain how the page fault and eviction
+>> processes differ between swap pages and other pages.
+
+	A list of all memory mapped files is kept for echa thread as mmap_files. A
+	hash table for memory mapped files is also kept. A new file is inserted
+	into the hash table and loaded lazily when needed.
+
+>> C3: Explain how you determine whether a new file mapping overlaps
+>> any existing segment.
+	
+	To determine whether a new file mapping overlaps any existing maps, I
+	divide the file into pages and check each of them for conflicting virtual
+	address. This works because a virtual address is unique for each process.
+
+---- RATIONALE ----
+
+>> C4: Mappings created with "mmap" have similar semantics to those of
+>> data demand-paged from executables, except that "mmap" mappings are
+>> written back to their original files, not to swap.  This implies
+>> that much of their implementation can be shared.  Explain why your
+>> implementation either does or does not share much of the code for
+>> the two situations.
+
+	My implementation shares most of the code. This is done to reduct the
+	duplication and reduct work required to write the code.
+
+			   SURVEY QUESTIONS
+			   ================
+
+Answering these questions is optional, but it will help us improve the
+course in future quarters.  Feel free to tell us anything you
+want--these questions are just to spur your thoughts.  You may also
+choose to respond anonymously in the course evaluations at the end of
+the quarter.
+
+>> In your opinion, was this assignment, or any one of the three problems
+>> in it, too easy or too hard?  Did it take too long or too little time?
+
+>> Did you find that working on a particular part of the assignment gave
+>> you greater insight into some aspect of OS design?
+
+>> Is there some particular fact or hint we should give students in
+>> future quarters to help them solve the problems?  Conversely, did you
+>> find any of our guidance to be misleading?
+
+>> Do you have any suggestions for the TAs to more effectively assist
+>> students, either for future quarters or the remaining projects?
+
+>> Any other comments?
