@@ -15,9 +15,6 @@ Arpith K <arpith@live.com> or <arpith.k@csa.iisc.ernet.in>
 >> If you have any preliminary comments on your submission, notes for the
 >> TAs, or extra credit, please give them here.
 
-	This file is incomplete and under construction. If you are reading this,
-	then it means that you have pulled the repository before I finished the
-	DESIGNDOC (or I just forgot to remove this message!)
 
 >> Please cite any offline or online sources you consulted while
 >> preparing your submission, other than the Pintos documentation, course
@@ -221,6 +218,10 @@ Arpith K <arpith@live.com> or <arpith.k@csa.iisc.ernet.in>
 >> possibility for deadlock but allows for high parallelism.  Explain
 >> where your design falls along this continuum and why you chose to
 >> design it this way.
+
+	I chose to have multiple locks instead of one lock for the whole VM.
+	Parallelism is the more important operating system feature and careful
+	design allowed me to use locks carefully for synchronization.
 
 			 MEMORY MAPPED FILES
 			 ===================
