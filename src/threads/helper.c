@@ -1,7 +1,7 @@
 #include "threads/thread.h"
 #include "threads/synch.h"
 
-inline bool sort_helper(const struct list_elem *a, const struct list_elem *b,
+bool sort_helper(const struct list_elem *a, const struct list_elem *b,
 		void *aux)
 {
 	if (aux)
@@ -16,7 +16,7 @@ inline bool sort_helper(const struct list_elem *a, const struct list_elem *b,
 
 }
 
-inline bool lock_priority_less_helper(const struct list_elem *a,
+bool lock_priority_less_helper(const struct list_elem *a,
 		const struct list_elem *b, void *aux)
 {
 	if (aux)

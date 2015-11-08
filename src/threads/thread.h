@@ -168,7 +168,7 @@ void thread_sleep(int64_t start_time, int64_t no_of_ticks_to_sleep);
 struct thread * thread_with_max_priority(void);
 void set_priority(struct thread *t, int new_priority, bool forced);
 
-inline bool sort_helper(const struct list_elem *a, const struct list_elem *b,
+bool sort_helper(const struct list_elem *a, const struct list_elem *b,
 		void *aux);
 
 inline void mlfqs_computations(struct thread *t);

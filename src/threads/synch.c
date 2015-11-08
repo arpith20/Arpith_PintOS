@@ -422,7 +422,7 @@ void cond_broadcast(struct condition *cond, struct lock *lock)
 		cond_signal(cond, lock);
 }
 
-inline bool sema_priority_less_helper(const struct list_elem *a,
+bool sema_priority_less_helper(const struct list_elem *a,
 		const struct list_elem *b, void *aux)
 {
 	if (aux)
