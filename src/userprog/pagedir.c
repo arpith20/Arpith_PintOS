@@ -283,6 +283,7 @@ static void invalidate_pagedir(uint32_t *pd)
 	}
 }
 
+#ifdef VM
 void *pagedir_op_page(uint32_t *pd, void *uaddr, void *vm_page)
 {
 	uint32_t *entry = 0;
@@ -325,3 +326,4 @@ void *pagedir_op_page(uint32_t *pd, void *uaddr, void *vm_page)
 	}
 	return NULL;
 }
+#endif

@@ -16,7 +16,10 @@
 #endif
 
 static int new_fid = 2;
+
+#ifdef VM
 static int new_mapid = 2;
+#endif
 
 void system_call_halt(void)
 {
@@ -43,10 +46,10 @@ void system_call_exit(int status)
 	while (true)
 	{
 		if (list_empty(&t->mmap_files))
-			break;
+		break;
 		e = list_begin(&t->mmap_files);
 		system_call_munmap(
-		list_entry (e, struct mmap_struct, thread_mmap_list)->mapid);
+				list_entry (e, struct mmap_struct, thread_mmap_list)->mapid);
 	}
 #endif
 
@@ -176,7 +179,6 @@ int system_call_read(int fd, void *buffer, unsigned size)
 	switch (fd)
 	{
 	case STDIN_FILENO:
-
 		for (offset = 0; offset < size; ++offset)
 			*(uint8_t *) (buffer + offset) = input_getc();
 		return size;
@@ -196,28 +198,28 @@ int system_call_read(int fd, void *buffer, unsigned size)
 				remaining = remaining - bytes_read)
 		{
 			bool stack_status = ((uint32_t) temp_buffer > 0)
-					&& (temp_buffer >= (esp - 32))
-					&& ((PHYS_BASE - pg_round_down(temp_buffer)) <= (1 << 23));
+			&& (temp_buffer >= (esp - 32))
+			&& ((PHYS_BASE - pg_round_down(temp_buffer)) <= (1 << 23));
 
 			offset = temp_buffer - pg_round_down(temp_buffer);
 			address = temp_buffer - offset;
 			struct page_struct *page = VM_find_page(address);
 
 			if (page == NULL)
-				if (stack_status)
-					page = VM_stack_grow(temp_buffer - offset, true);
-				else
-					system_call_exit(-1);
+			if (stack_status)
+			page = VM_stack_grow(temp_buffer - offset, true);
+			else
+			system_call_exit(-1);
 
 			//load the page and pin it
 			if (!page->loaded)
-				VM_operation_page(OP_LOAD, page, page->physical_address, true);
+			VM_operation_page(OP_LOAD, page, page->physical_address, true);
 
 			left = offset + remaining;
 			if (left > PGSIZE)
-				bytes_read = remaining - left + PGSIZE;
+			bytes_read = remaining - left + PGSIZE;
 			else
-				bytes_read = remaining;
+			bytes_read = remaining;
 
 			lock_acquire(&file_lock);
 			ret_val = ret_val + file_read(f->f, temp_buffer, bytes_read);
@@ -323,6 +325,7 @@ fd_to_file(int fid)
 	return NULL;
 }
 
+#ifdef VM
 mapid_t system_call_mmap(int fd, void *address)
 {
 	ASSERT(fd != STDIN_FILENO || fd != STDOUT_FILENO);
@@ -337,7 +340,7 @@ mapid_t system_call_mmap(int fd, void *address)
 	struct file_struct *fs = NULL;
 	fs = fd_to_file(fd);
 	if (fs != NULL)
-		f = file_reopen(fs->f);
+	f = file_reopen(fs->f);
 	else
 	{
 		lock_release(&file_lock);
@@ -347,7 +350,7 @@ mapid_t system_call_mmap(int fd, void *address)
 
 	if (f == NULL || size <= 0 || address == NULL || address == 0x0
 			|| pg_ofs(address) != 0)
-		return -1;
+	return -1;
 
 	size_t offset = 0;
 	void *tmp_addr = address;
@@ -380,10 +383,10 @@ mapid_t system_call_mmap(int fd, void *address)
 				tmp_addr += PGSIZE;
 			}
 			else
-				return -1;
+			return -1;
 		}
 		else
-			return -1;
+		return -1;
 	}
 
 	mapid_t mapid = new_mapid++;
@@ -406,7 +409,7 @@ mapid_t system_call_mmap(int fd, void *address)
 		return mapid;
 	}
 	else
-		return NULL;
+	return NULL;
 }
 
 void system_call_munmap(mapid_t mapid)
@@ -437,9 +440,9 @@ void system_call_munmap(mapid_t mapid)
 					VM_pin(true, page, false);
 
 					if (page->loaded && page->physical_address != NULL)
-						VM_free_frame(page->physical_address, page->pagedir);
+					VM_free_frame(page->physical_address, page->pagedir);
 					else
-						PANIC("Problem in system unmap");
+					PANIC("Problem in system unmap");
 				}
 				VM_operation_page(OP_FREE, page, NULL, NULL);
 				cur_addr += PGSIZE;
@@ -448,7 +451,7 @@ void system_call_munmap(mapid_t mapid)
 		}
 	}
 	else
-		system_call_exit(-1);
+	system_call_exit(-1);
 
 	//remove the file from hash table
 	lock_acquire(&l[LOCK_MMAP]);
@@ -457,3 +460,4 @@ void system_call_munmap(mapid_t mapid)
 	free(mf);
 	lock_release(&l[LOCK_MMAP]);
 }
+#endif

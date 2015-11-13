@@ -5,6 +5,7 @@
 #include "vm/struct.h"
 #endif
 #include <stdint.h>
+#include <stdbool.h>
 
 uint32_t *pagedir_create(void);
 void pagedir_destroy(uint32_t *pd);
@@ -17,6 +18,8 @@ bool pagedir_is_accessed(uint32_t *pd, const void *upage);
 void pagedir_set_accessed(uint32_t *pd, const void *upage, bool accessed);
 void pagedir_activate(uint32_t *pd);
 
+#ifdef VM
 void *pagedir_op_page(uint32_t *pd, void *uaddr, void *vm_page);
+#endif
 
 #endif /* userprog/pagedir.h */

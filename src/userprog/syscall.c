@@ -113,6 +113,7 @@ static void syscall_handler(struct intr_frame *f)
 			else
 				system_call_exit(-1);
 			break;
+#ifdef VM
 		case SYS_MMAP:
 			if (is_user_vaddr(argument + 1) && is_user_vaddr(argument + 2))
 				ret_val = system_call_mmap(*(argument + 1), *(argument + 2));
@@ -125,6 +126,7 @@ static void syscall_handler(struct intr_frame *f)
 			else
 				system_call_exit(-1);
 			break;
+#endif
 		default:
 			system_call_exit(-1);
 		}

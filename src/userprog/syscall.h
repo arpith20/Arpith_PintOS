@@ -25,8 +25,11 @@ int system_call_write(int fd, const void *buffer, unsigned size);//CallNumber: 9
 void system_call_seek(int fd, unsigned position);				//CallNumber: 10
 unsigned system_call_tell(int fd);								//CallNumber: 11
 void system_call_close(int fd);									//CallNumber: 12
+
+#ifdef VM
 mapid_t system_call_mmap(int fd, void *addr);					//CallNumber: 13
 void system_call_munmap(mapid_t mapid);							//CallNumber: 14
+#endif
 
 struct file_struct * fd_to_file(int fid);
 

@@ -127,7 +127,10 @@ static void page_fault(struct intr_frame *f)
 	bool write; /* True: access was write, false: access was read. */
 	bool user; /* True: access by user, false: access by kernel. */
 	void *fault_addr; /* Fault address. */
+
+#ifdef VM
 	void *fault_page; //Fault pg
+#endif
 
 	/* Obtain faulting address, the virtual address that was
 	 accessed to cause the fault.  It may point to code or to
@@ -152,7 +155,7 @@ static void page_fault(struct intr_frame *f)
 
 #ifndef VM
 	if ((is_kernel_vaddr(fault_addr) && user) || not_present)
-	system_call_exit(-1);
+		system_call_exit(-1);
 #else
 
 	//No access to kernel region is user mode

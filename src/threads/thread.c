@@ -263,7 +263,7 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
 	list_init(&t->mmap_files);
 	list_init(&t->children);
 	if (cur != initial_thread)
-		list_push_front(&cur->children, &t->child_elem);
+	list_push_front(&cur->children, &t->child_elem);
 #endif
 
 #endif
@@ -359,8 +359,8 @@ void thread_exit(void)
 				e != list_end(&thread_current()->children); e = list_next(e))
 		{
 			if (list_entry(e, struct thread, child_elem)->process_exited)
-				sema_up(
-						&(list_entry(e, struct thread, child_elem))->sema_process_exit);
+			sema_up(
+					&(list_entry(e, struct thread, child_elem))->sema_process_exit);
 			else
 			{
 				list_entry(e, struct thread, child_elem)->parent = NULL;
@@ -370,13 +370,14 @@ void thread_exit(void)
 
 		}
 	}
-
+#endif
+#ifdef USERPROG
 	process_exit();
-
+#endif
+#ifdef VM
 	if (cur != NULL && cur->parent != NULL)
-		if (cur->parent != initial_thread)
-			list_remove(&cur->child_elem);
-
+	if (cur->parent != initial_thread)
+	list_remove(&cur->child_elem);
 #endif
 
 	/* Remove thread from all threads list, set our status to dying,
