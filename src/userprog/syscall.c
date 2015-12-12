@@ -114,15 +114,47 @@ static void syscall_handler(struct intr_frame *f)
 				system_call_exit(-1);
 			break;
 #ifdef VM
-		case SYS_MMAP:
+			case SYS_MMAP:
 			if (is_user_vaddr(argument + 1) && is_user_vaddr(argument + 2))
-				ret_val = system_call_mmap(*(argument + 1), *(argument + 2));
+			ret_val = system_call_mmap(*(argument + 1), *(argument + 2));
+			else
+			system_call_exit(-1);
+			break;
+			case SYS_MUNMAP:
+			if (is_user_vaddr(argument + 1))
+			system_call_munmap(*(argument + 1));
+			else
+			system_call_exit(-1);
+			break;
+#endif
+#ifdef P4FILESYS
+		case SYS_CHDIR:
+			if (is_user_vaddr(argument + 1))
+				ret_val = system_call_chdir(*(argument + 1));
 			else
 				system_call_exit(-1);
 			break;
-		case SYS_MUNMAP:
+		case SYS_MKDIR:
 			if (is_user_vaddr(argument + 1))
-				system_call_munmap(*(argument + 1));
+				ret_val = system_call_mkdir(*(argument + 1));
+			else
+				system_call_exit(-1);
+			break;
+		case SYS_READDIR:
+			if (is_user_vaddr(argument + 1) && is_user_vaddr(argument + 2))
+				ret_val = system_call_readdir(*(argument + 1), *(argument + 2));
+			else
+				system_call_exit(-1);
+			break;
+		case SYS_ISDIR:
+			if (is_user_vaddr(argument + 1))
+				ret_val = system_call_isdir(*(argument + 1));
+			else
+				system_call_exit(-1);
+			break;
+		case SYS_INUMBER:
+			if (is_user_vaddr(argument + 1))
+				ret_val = system_call_inumber(*(argument + 1));
 			else
 				system_call_exit(-1);
 			break;
@@ -134,6 +166,8 @@ static void syscall_handler(struct intr_frame *f)
 	else
 		system_call_exit(-1);
 
+#ifdef VM
 	param_esp = f->esp;
+#endif
 	f->eax = ret_val;
 }

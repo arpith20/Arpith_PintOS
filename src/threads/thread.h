@@ -144,6 +144,11 @@ struct thread
 	//Members exclusively defined for advanced scheduler
 	int recent_cpu;
 	int nice;
+
+#ifdef P4FILESYS
+	//Members defined for project 4
+	struct dir *working_dir;
+#endif
 	/**************************/
 };
 
@@ -152,6 +157,7 @@ struct file_struct
 	int fid;
 	struct list_elem thread_file_elem;
 	struct file *f;
+	struct dir *d;
 };
 
 /* If false (default), use round-robin scheduler.

@@ -4,7 +4,9 @@
 #include "lib/user/syscall.h"
 #include "vm/struct.h"
 
+#ifdef VM
 void *param_esp;
+#endif
 
 void syscall_init(void);
 
@@ -28,9 +30,17 @@ void system_call_close(int fd);									//CallNumber: 12
 
 #ifdef VM
 mapid_t system_call_mmap(int fd, void *addr);					//CallNumber: 13
-void system_call_munmap(mapid_t mapid);							//CallNumber: 14
+void system_call_munmap(mapid_t mapid);//CallNumber: 14
 #endif
 
-struct file_struct * fd_to_file(int fid);
+#ifdef P4FILESYS
+bool system_call_chdir(const char *dir);						//callNumber: 15
+bool system_call_mkdir(const char *dir);//callNumber: 16
+bool system_call_readdir(int fd, char *name);//callNumber: 17
+bool system_call_isdir(int fd);//callNumber: 18
+int system_call_inumber(int fd);//callNumber: 19
+#endif
+
+struct file_struct *fd_to_file(int fid);
 
 #endif /* userprog/syscall.h */

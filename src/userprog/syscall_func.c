@@ -15,6 +15,10 @@
 #include "vm/struct.h"
 #endif
 
+#ifdef P4FILESYS
+#include "filesys/inode.h"
+#endif
+
 static int new_fid = 2;
 
 #ifdef VM
@@ -80,7 +84,11 @@ bool system_call_create(const char *file, unsigned initial_size)
 	if (file != NULL)
 	{
 		lock_acquire(&file_lock);
+#ifndef P4FILESYS
 		bool success = filesys_create(file, initial_size);
+#else
+		bool success = filesys_create(file, initial_size, false);
+#endif
 		lock_release(&file_lock);
 		return success;
 	}
@@ -107,8 +115,10 @@ int system_call_open(const char *file)
 {
 	if (file != NULL)
 	{
-		struct file *opened_file;
-		struct file_struct *opened_file_struct;
+		struct file *opened_file = NULL;
+		struct file_struct *opened_file_struct = NULL;
+		bool is_dir = false;
+		struct inode *i = NULL;
 
 		lock_acquire(&file_lock);
 		opened_file = filesys_open(file);
@@ -116,6 +126,13 @@ int system_call_open(const char *file)
 
 		if (opened_file == NULL)
 			return -1;
+
+#ifdef P4FILESYS
+		i = file_get_inode(opened_file);
+		if (i == NULL)
+			return -1;
+		is_dir = inode_op(OP_ISDIR, i);
+#endif
 
 		opened_file_struct = (struct file_struct *) malloc(
 				sizeof(struct file_struct));
@@ -126,7 +143,22 @@ int system_call_open(const char *file)
 		}
 
 		lock_acquire(&file_lock);
-		opened_file_struct->f = opened_file;
+
+		switch (is_dir)
+		{
+		case true:
+			opened_file_struct->f = NULL;
+			opened_file_struct->d = opened_file;
+			break;
+		case false:
+			opened_file_struct->f = opened_file;
+			opened_file_struct->d = NULL;
+			break;
+		default:
+			PANIC("Supernatural stuff going on in system_call_open. "
+					"Now, this is some reason to panic!!");
+		}
+
 		opened_file_struct->fid = new_fid++;
 		list_push_back(&thread_current()->files,
 				&opened_file_struct->thread_file_elem);
@@ -144,11 +176,12 @@ int system_call_open(const char *file)
 int system_call_filesize(int fd)
 {
 	struct file_struct *f = NULL;
-
 	int size = 0;
 
+	lock_acquire(&file_lock);
 	f = fd_to_file(fd);
-	if (f == NULL)
+	lock_release(&file_lock);
+	if (f == NULL || f->d != NULL)
 		return -1;
 
 	lock_acquire(&file_lock);
@@ -185,8 +218,10 @@ int system_call_read(int fd, void *buffer, unsigned size)
 	case STDOUT_FILENO:
 		return -1;
 	default:
+		lock_acquire(&file_lock);
 		f = fd_to_file(fd);
-		if (f == NULL)
+		lock_release(&file_lock);
+		if (f == NULL || f->d != NULL)
 			return -1;
 #ifndef VM
 		lock_acquire(&file_lock);
@@ -237,8 +272,6 @@ int system_call_read(int fd, void *buffer, unsigned size)
 int system_call_write(int fd, const void *buffer, unsigned size)
 {
 	int ret_val = -1;
-	const void *esp = (const void*) param_esp;
-
 	struct file_struct *f = NULL;
 
 	if (!is_user_vaddr(buffer) || !is_user_vaddr(buffer + size))
@@ -251,10 +284,11 @@ int system_call_write(int fd, const void *buffer, unsigned size)
 		putbuf(buffer, size);
 		return size;
 	default:
+		lock_acquire(&file_lock);
 		f = fd_to_file(fd);
-		if (f == NULL)
+		lock_release(&file_lock);
+		if (f == NULL || f->d != NULL)
 			return -1;
-
 		lock_acquire(&file_lock);
 		ret_val = file_write(f->f, buffer, size);
 		lock_release(&file_lock);
@@ -266,10 +300,11 @@ void system_call_seek(int fd, unsigned position)
 {
 	struct file_struct *f = NULL;
 
+	lock_acquire(&file_lock);
 	f = fd_to_file(fd);
-	if (f == NULL)
+	lock_release(&file_lock);
+	if (f == NULL || f->d != NULL)
 		system_call_exit(-1);
-
 	lock_acquire(&file_lock);
 	file_seek(f->f, position);
 	lock_release(&file_lock);
@@ -280,9 +315,12 @@ unsigned system_call_tell(int fd)
 	struct file_struct *f = NULL;
 	unsigned position = 0;
 
+	lock_acquire(&file_lock);
 	f = fd_to_file(fd);
-	if (f == NULL)
-		system_call_exit(-1);
+	lock_release(&file_lock);
+
+	if (f == NULL || f->d != NULL)
+		return -1;
 
 	lock_acquire(&file_lock);
 	position = file_tell(f->f);
@@ -294,15 +332,25 @@ unsigned system_call_tell(int fd)
 void system_call_close(int fd)
 {
 	struct file_struct *f = NULL;
-
+	lock_acquire(&file_lock);
 	f = fd_to_file(fd);
-
+	lock_release(&file_lock);
 	if (f == NULL)
 		system_call_exit(-1);
 
 	lock_acquire(&file_lock);
 	list_remove(&f->thread_file_elem);
-	file_close(f->f);
+	switch ((f->d != NULL))
+	{
+	case true:
+		dir_close(f->d);
+		break;
+	case false:
+		file_close(f->f);
+		break;
+	default:
+		PANIC("Something is wrong with system_call_close");
+	}
 	free(f);
 	lock_release(&file_lock);
 }
@@ -459,5 +507,166 @@ void system_call_munmap(mapid_t mapid)
 	list_remove(&mf->thread_mmap_list);
 	free(mf);
 	lock_release(&l[LOCK_MMAP]);
+}
+#endif
+
+#ifdef P4FILESYS
+bool system_call_chdir(const char* name)
+{
+	bool ret_val;
+	lock_acquire(&file_lock);
+
+	struct inode *inode = NULL;
+	struct dir* dir = NULL;
+	char* file_name = NULL;
+	if (*name == '\0')
+	{
+		lock_release(&file_lock);
+		return false;
+	}
+	filesys_inside_dir(&dir, name);
+	filesys_filename(&file_name, name);
+	if (dir == NULL || file_name == NULL)
+	{
+		if (file_name != NULL)
+			free(file_name);
+		lock_release(&file_lock);
+		return false;
+	}
+
+	//case 1
+	//file_name = sample handled by first part of if condition
+	//file_name = sample.txt handled by second part of of condition
+	//filename = '' handled inside if.
+	if (strstr(file_name, ".") == NULL
+			|| (strlen(file_name) != 1 && strlen(file_name) != 2))
+	{
+		if (file_name[0] == '\0')
+		{
+			thread_current()->working_dir = dir;
+			free(file_name);
+			lock_release(&file_lock);
+			return true;
+		}
+		bool success = dir_lookup(dir, file_name, &inode);
+		if (success)
+		{
+			dir_close(dir);
+			free(file_name);
+			dir = dir_open(inode);
+			if (dir != NULL)
+			{
+				dir_close(thread_current()->working_dir);
+				thread_current()->working_dir = dir;
+				lock_release(&file_lock);
+				return true;
+			}
+			lock_release(&file_lock);
+			return false;
+		}
+		lock_release(&file_lock);
+		return false;
+	}
+	//case 2 lol! Someone is fond of useless operations!
+	if (strcmp(file_name, ".") == 0)
+	{
+		thread_current()->working_dir = dir;
+		free(file_name);
+		lock_release(&file_lock);
+		return true;
+	}
+	//case 3
+	if (strcmp(file_name, "..") == 0)
+	{
+		bool success = dir_op(DIROP_GETPAR,dir,&inode, 0);
+		if (success)
+		{
+			dir_close(dir);
+			free(file_name);
+			dir = dir_open(inode);
+			if (dir != NULL)
+			{
+				dir_close(thread_current()->working_dir);
+				thread_current()->working_dir = dir;
+				lock_release(&file_lock);
+				return true;
+			}
+			lock_release(&file_lock);
+			return false;
+		}
+		lock_release(&file_lock);
+		return false;
+	}
+}
+
+bool system_call_mkdir(const char* dir)
+{
+	bool ret_val = false;
+	lock_acquire(&file_lock);
+	ret_val = filesys_create(dir, 0, true);
+	lock_release(&file_lock);
+	return ret_val;
+}
+
+bool system_call_readdir(int fd, char* name)
+{
+
+	bool ret_val = false;
+	struct file_struct *f = NULL;
+
+	lock_acquire(&file_lock);
+	f = fd_to_file(fd);
+	if (f != NULL && f->d != NULL && dir_readdir(f->d, name))
+		ret_val = true;
+	lock_release(&file_lock);
+	return ret_val;
+}
+
+bool system_call_isdir(int fd)
+{
+	struct file_struct *f = NULL;
+	bool ret_val = false;
+	lock_acquire(&file_lock);
+	f = fd_to_file(fd);
+	if (f != NULL)
+	{
+		if (f->d != NULL)
+			ret_val = true;
+	}
+	else
+		PANIC("Problem in isdir system call");
+	lock_release(&file_lock);
+	return ret_val;
+}
+
+int system_call_inumber(int fd)
+{
+	int return_val = -1;
+	struct file_struct *f = NULL;
+	lock_acquire(&file_lock);
+	f = fd_to_file(fd);
+	if (f != NULL)
+	{
+
+		switch ((f->d != NULL))
+		{
+		case true:
+			return_val = inode_get_inumber(dir_get_inode(f->d));
+			break;
+		case false:
+			return_val = inode_get_inumber(file_get_inode(f->f));
+			break;
+		default:
+			PANIC("Problem in system_call_inumber "
+					"Paranormal activity detected. "
+					"If you see this message, you should be scared. "
+					"Very scared");
+			//PS: Be scared only if you see the above during execution :P
+		}
+	}
+	else
+		PANIC("Problem in system_call_inumber. pf==NULL");
+	lock_release(&file_lock);
+	return return_val;
 }
 #endif

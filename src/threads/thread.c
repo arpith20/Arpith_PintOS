@@ -198,12 +198,19 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
 	struct switch_entry_frame *ef;
 	struct switch_threads_frame *sf;
 	tid_t tid;
+	struct dir *working_directory = NULL;
 
 	ASSERT(function != NULL);
 
 	/**********************************************/
 	//determines the validity of input arguments
 	ASSERT(PRI_MIN<=priority && priority<=PRI_MAX);
+
+#ifdef P4FILESYS
+	//for project 4
+	//Determines the current working directory
+	working_directory = cur->working_dir;
+#endif
 	/**********************************************/
 
 	/* Allocate thread. */
@@ -264,6 +271,11 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
 	list_init(&t->children);
 	if (cur != initial_thread)
 	list_push_front(&cur->children, &t->child_elem);
+#endif
+#ifdef P4FILESYS
+	//restore the working directory
+	if (working_directory != NULL)
+		t->working_dir = dir_reopen(working_directory);
 #endif
 
 #endif

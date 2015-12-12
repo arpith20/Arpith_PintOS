@@ -1,0 +1,303 @@
+       	     +-------------------------+
+		     |			E0 253	       |
+		     | PROJECT 4: FILE SYSTEMS |
+		     |	   DESIGN DOCUMENT     |
+		     +-------------------------+
+
+---- GROUP ----
+
+>> Fill in the names and email addresses of your group members.
+
+Arpith K <arpith@live.com> or <arpith.k@csa.iisc.ernet.in>
+
+---- PRELIMINARIES ----
+
+>> If you have any preliminary comments on your submission, notes for the
+>> TAs, or extra credit, please give them here.
+
+Note 1:
+
+	Please ensure that P4FILESYS symbol is defined in Make.vars (as
+	-DP4FILESYS). I have defined this in my file, so ideally there should not
+	be any problems. 
+
+	This a heads up just in case your script does not read my (modified)
+	Make.vars file.
+
+Note 2:
+	
+	This project has been compiled using gcc version 5.2.1. (gcc-5) 
+	
+	While there is no reason why this should not compile using gcc-4 (which I
+	believe you are using), I just thought that is is better to mention the
+	same just in case some unintended compilation issues arise.
+
+>> Please cite any offline or online sources you consulted while
+>> preparing your submission, other than the Pintos documentation, course
+>> text, lecture notes, and course staff.
+
+		     INDEXED AND EXTENSIBLE FILES
+		     ============================
+
+---- DATA STRUCTURES ----
+
+>> A1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+	filesys/inode.h 
+	struct struct inode_disk and inode
+	----------------------------------
+	The following modifications were amde to the inode and
+	inode_disk data structure to implement indexed and extensible files
+
+		block_sector_t block[115];
+			This is a pointer to store direct blocks.
+
+        uint32_t inode_data[10];                  
+            This contains various miscellaneous data pertaining to indexing
+            information, directory implementation etc.
+
+    struct struct iblock_struct
+	---------------------------
+	This structure uas created to store all the indirect block pointers.
+
+		uint32_t block[128];
+			This is a pointer to store indirect blocks.
+
+
+>> A2: What is the maximum size of a file supported by your inode
+>> structure?  Show your work.
+
+	Total number of blocks 	= 
+								  Number of direct blocks 
+								+ no of single indirect blocks 
+								+ no of double indirect blocks
+							= 113 + 128 + (128*128) 
+							= 16625
+
+	Maximum size of file 	= no of blocks * size of each block
+							= 16625 * 512
+							= 8512000 bytes
+							= 8312 KB
+							= 8.12 MB
+
+---- SYNCHRONIZATION ----
+
+>> A3: Explain how your code avoids a race if two processes attempt to
+>> extend a file at the same time.
+
+	In such a scenario, the process which runs first would extend the file.
+	The next one would see an extended file and would not try to extend it
+	again. 
+
+>> A4: Suppose processes A and B both have file F open, both
+>> positioned at end-of-file.  If A reads and B writes F at the same
+>> time, A may read all, part, or none of what B writes.  However, A
+>> may not read data other than what B writes, e.g. if B writes
+>> nonzero data, A is not allowed to see all zeros.  Explain how your
+>> code avoids this race.
+
+	In my implementation, only one of the process can open a file F. So, in
+	the above situation, either A would read F first, or B would write into F
+	first. All operations are mutually exclusive.
+
+>> A5: Explain how your synchronization design provides "fairness".
+>> File access is "fair" if readers cannot indefinitely block writers
+>> or vice versa.  That is, many processes reading from a file cannot
+>> prevent forever another process from writing the file, and many
+>> processes writing to a file cannot prevent another process forever
+>> from reading the file.
+
+	The concept of 'fairness' has not been incorporated into my design. It
+	upto the programmer of the application to design it such that a fair
+	access to the files can be provided.
+
+---- RATIONALE ----
+
+>> A6: Is your inode structure a multilevel index?  If so, why did you
+>> choose this particular combination of direct, indirect, and doubly
+>> indirect blocks?  If not, why did you choose an alternative inode
+>> structure, and what advantages and disadvantages does your
+>> structure have, compared to a multilevel index?
+
+	Yes. My inode structure uses multilevel indexing. The main reason for
+	doing this is to maximize the file size supported by the system and this
+	is it's major advantage. However, this also increases the number of disk
+	accesses to locate the block which is require.
+
+			    SUBDIRECTORIES
+			    ==============
+
+---- DATA STRUCTURES ----
+
+>> B1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+	threads/thread.h
+	struct thread
+	-------------
+		struct dir *working_dir;
+			This is a directory pointer to store the current working directory
+			for that thread.
+
+---- ALGORITHMS ----
+
+>> B2: Describe your code for traversing a user-specified path.  How
+>> do traversals of absolute and relative paths differ?
+
+	To determine if the given path is absolute or relative, the first
+	character is checked to see if its either '/' or '.'. It it is a '/' then
+	it is determined that the given path is absolute and I start from the root
+	directory. In the other case, once we have determined that the path is
+	relative, we start from the current working directory.
+
+	The next step is to parse the path and determine what the parsed token
+	means. It can be one of the following cases:
+
+	case 1: if (strstr(curr_token, ".") == NULL || (strlen(file_name) != 1 &&
+				strlen(file_name) != 2))
+		This means that I am looking at a file or a directory.
+
+	case 2: if (strcmp(curr_token, '.') == 0)
+		This means current directory.
+
+	case 3: if (strcmp('..', curr_token) == 0)
+		This means I have to go to previous directory.
+
+	The above 3 cases encompasses all valid situations required to traverse a
+	valid user-specified path.
+
+---- SYNCHRONIZATION ----
+
+>> B4: How do you prevent races on directory entries?  For example,
+>> only one of two simultaneous attempts to remove a single file
+>> should succeed, as should only one of two simultaneous attempts to
+>> create a file with the same name, and so on.
+
+	Adding or removing a directory requires a file_lock. Hence only one
+	process can perform operations at any specified time thus eliminating all
+	possibilities of races.
+
+>> B5: Does your implementation allow a directory to be removed if it
+>> is open by a process or if it is in use as a process's current
+>> working directory?  If so, what happens to that process's future
+>> file system operations?  If not, how do you prevent it?
+
+	No. This is not allowed. A function dir_remove_validate ensures that a
+	directory is not removed if it is not empty or is being used by some other
+	process.
+
+---- RATIONALE ----
+
+>> B6: Explain why you chose to represent the current directory of a
+>> process the way you did.
+	
+	In my implementation, a pointer of the type dir points to the current
+	directory. A simple pointer seemed like the easiest way to implement as
+	opposed to having a inode etc.
+
+			     BUFFER CACHE
+			     ============
+
+---- DATA STRUCTURES ----
+
+>> C1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+	filesys/filesys.h
+	The following data structure was created to aid the working of buffer
+	cache
+
+		struct buffer_struct
+		--------------------
+			bool dirty;
+				Determines that some data was written to the buffer.
+			
+			bool access;
+				A flag to know that the buffer was accessed (read/write).
+			
+			uint8_t content[BLOCK_SECTOR_SIZE];
+				The contents in the buffer is stored here.
+			
+			uint32_t sector;
+				Each data is stored on some sector on the disk. This stores
+				this information
+
+			struct list_elem buffer_listelem;
+				A list element for buffer_list
+
+		lock_init(&buffer_lock);
+			A lock for buffer synchronization
+
+		buffer_size = 0;
+			Determines the current size of the buffer. Max is 64.
+
+
+---- ALGORITHMS ----
+
+>> C2: Describe how your cache replacement algorithm chooses a cache
+>> block to evict.
+
+	Every time a cache block is accessed, a accessed flag is set to true and
+	if the data in the cache is modified, then dirty flag is set to true.
+	Finally, a dirty block which has not been accessed is chosen to be
+	evicted. buffer_evict() function performs this operation.
+
+>> C3: Describe your implementation of write-behind.
+
+	Before shutting down the file system module, all entries marked as dirty
+	are written to the disk.
+
+>> C4: Describe your implementation of read-ahead.
+
+
+---- SYNCHRONIZATION ----
+
+>> C5: When one process is actively reading or writing data in a
+>> buffer cache block, how are other processes prevented from evicting
+>> that block?
+
+	I am using a buffer_lock to prevent to synchronize the read/write/evict
+	operations.
+
+>> C6: During the eviction of a block from the cache, how are other
+>> processes prevented from attempting to access the block?
+
+	A buffer_lock is used which prevents multiple processes from accessing the
+	block.
+
+---- RATIONALE ----
+
+>> C7: Describe a file workload likely to benefit from buffer caching,
+>> and workloads likely to benefit from read-ahead and write-behind.
+
+	Buffer caching is likely to benefit when reading short files.
+	Read ahead is likely to benefit when reading a complete file.
+	Write behind is likely to benefit when writing small bytes to file.
+
+			   SURVEY QUESTIONS
+			   ================
+
+Answering these questions is optional, but it will help us improve the
+course in future quarters.  Feel free to tell us anything you
+want--these questions are just to spur your thoughts.  You may also
+choose to respond anonymously in the course evaluations at the end of
+the quarter.
+
+>> In your opinion, was this assignment, or any one of the three problems
+>> in it, too easy or too hard?  Did it take too long or too little time?
+
+>> Did you find that working on a particular part of the assignment gave
+>> you greater insight into some aspect of OS design?
+
+>> Is there some particular fact or hint we should give students in
+>> future quarters to help them solve the problems?  Conversely, did you
+>> find any of our guidance to be misleading?
+
+>> Do you have any suggestions for the TAs to more effectively assist
+>> students in future quarters?
+
+>> Any other comments?

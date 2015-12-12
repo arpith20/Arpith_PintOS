@@ -257,6 +257,11 @@ void process_exit(void)
 	if (cur->parent != NULL)
 		sema_down(&cur->sema_process_exit);
 
+#ifdef P4FILESYS
+	if (cur->working_dir)
+		dir_close(cur->working_dir);
+#endif
+
 	/* Destroy the current process's page directory and switch back
 	 to the kernel-only page directory. */
 	pd = cur->pagedir;
@@ -554,10 +559,11 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		/* Get a page of memory. */
 		uint8_t *physical_address = palloc_get_page(PAL_USER);
 		if (physical_address == NULL)
-		return false;
+			return false;
 
 		/* Load this page. */
-		if (file_read(file, physical_address, page_read_bytes) != (int) page_read_bytes)
+		if (file_read(file, physical_address, page_read_bytes)
+				!= (int) page_read_bytes)
 		{
 			palloc_free_page(physical_address);
 			return false;
@@ -595,7 +601,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		{
 			inode = file_get_inode(file);
 			if (inode != NULL)
-				bid = byte_to_sector(inode, load_offset);
+			bid = byte_to_sector(inode, load_offset);
 		}
 		p = NULL;
 		p = VM_new_page(TYPE_FILE, upage, writable, file, load_offset,
@@ -608,7 +614,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
 			load_offset = load_offset + PGSIZE;
 		}
 		else
-			return false;
+		return false;
 	}
 	file_seek(file, ofs);
 	return true;
@@ -627,18 +633,19 @@ static bool setup_stack(void **esp)
 	physical_address = palloc_get_page(PAL_USER | PAL_ZERO);
 	if (physical_address != NULL)
 	{
-		success = install_page(((uint8_t *) PHYS_BASE) - PGSIZE, physical_address,
+		success = install_page(((uint8_t *) PHYS_BASE) - PGSIZE,
+				physical_address,
 				true);
 		if (success)
-		*esp = PHYS_BASE;
+			*esp = PHYS_BASE;
 		else
-		palloc_free_page(physical_address);
+			palloc_free_page(physical_address);
 	}
 #else
 	struct page_struct *p;
 	p = NULL;
 	p = VM_new_page(TYPE_ZERO, ((uint8_t *) PHYS_BASE) - PGSIZE, true, NULL,
-	NULL, NULL, NULL, NULL);
+			NULL, NULL, NULL, NULL);
 	if (p != NULL)
 	{
 		*esp = PHYS_BASE;
