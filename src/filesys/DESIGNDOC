@@ -29,7 +29,7 @@ Note 2:
 	This project has been compiled using gcc version 5.2.1. (gcc-5) 
 	
 	While there is no reason why this should not compile using gcc-4 (which I
-	believe you are using), I just thought that is is better to mention the
+	believe you are using), I just thought that it is better to mention the
 	same just in case some unintended compilation issues arise.
 
 >> Please cite any offline or online sources you consulted while
