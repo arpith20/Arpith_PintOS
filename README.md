@@ -40,5 +40,4 @@ times. I could not debug this before the deadline.</pre>
 
 ---
 **Beware!**      
-Folks at IISc run sophisticated plagiarism detection tools including MOSS and defaulters are penalized heavily.
-So please refrain from submitting this code as your own.</pre>
+Folks at IISc run sophisticated plagiarism detection tools including MOSS. Defaulters are penalized heavily, so please refrain from submitting this code as your own.
